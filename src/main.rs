@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use openshell_annotate::config::Config;
 use openshell_annotate::directive::Directive;
 use openshell_annotate::drift;
 use openshell_annotate::generate::{self, miette_str};
 use openshell_annotate::lint::{self, Severity};
 use openshell_annotate::providers::{self, Profile};
+use openshell_annotate::report::{self, ColorMode, Style};
 use openshell_annotate::scan::{self, Scan};
 use openshell_annotate::validate;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,26 @@ struct Cli {
     config: Option<PathBuf>,
     #[command(subcommand)]
     cmd: Cmd,
+}
+
+/// Lint output format.
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum LintFormat {
+    /// Multi-line report with source context, underlines, icons and suggested fixes.
+    Human,
+    /// JSON array of findings (stable).
+    Json,
+    /// One line per finding: `file:line: severity[category]: message` (stable; for scripts and CI logs).
+    Compact,
+}
+
+/// `--color` values.
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ColorArg {
+    /// Colour when stdout is a terminal; honours NO_COLOR, CLICOLOR_FORCE and TERM=dumb.
+    Auto,
+    Always,
+    Never,
 }
 
 #[derive(Subcommand)]
@@ -58,8 +79,19 @@ enum Cmd {
         /// Exit 1 on warnings too.
         #[arg(long)]
         deny_warnings: bool,
+        /// Output format.
+        #[arg(long, value_enum, default_value_t = LintFormat::Human, conflicts_with = "json")]
+        format: LintFormat,
+        /// Alias for `--format json`.
         #[arg(long)]
         json: bool,
+        /// Colour for the human format.
+        #[arg(long, value_enum, default_value_t = ColorArg::Auto)]
+        color: ColorArg,
+        /// Plain ASCII in the human format (no emoji or Unicode icons). Icons also turn off by themselves when the locale is
+        /// not UTF-8 or TERM=dumb.
+        #[arg(long, visible_alias = "ascii")]
+        no_icons: bool,
     },
     /// Map sandbox allow/deny events (OCSF JSON lines or `openshell logs` shorthand) back to directives: suggest missing ones,
     /// flag stale ones. Exit 1 when directives are missing.
@@ -280,8 +312,12 @@ fn run(cli: Cli) -> Result<ExitCode> {
             paths,
             policy,
             deny_warnings,
+            format,
             json,
+            color,
+            no_icons,
         } => {
+            let format = if json { LintFormat::Json } else { format };
             let s = do_scan(&root, &paths, &cfg)?;
             let mut findings = lint::lint(&s, &cfg);
             if let Some(p) = &policy {
@@ -295,22 +331,25 @@ fn run(cli: Cli) -> Result<ExitCode> {
                             .map(|e| (e, Severity::Error))
                             .chain(warns.into_iter().map(|w| (w, Severity::Warning)))
                         {
-                            findings.push(lint::Finding {
-                                file: p.display().to_string(),
-                                line: 0,
-                                severity: sev,
-                                category: "policy",
-                                message: v,
-                            });
+                            let mut f =
+                                lint::Finding::new(p.display().to_string(), 0, sev, "policy", v);
+                            // "network_policies.api.endpoints[0]: reason" -> headline = reason, note = where.
+                            if let Some((at, why)) = f.message.split_once(": ") {
+                                if !at.contains(' ') {
+                                    f.note = Some(format!("at `{at}`"));
+                                    f.title = Some(why.to_string());
+                                }
+                            }
+                            findings.push(f);
                         }
                     }
-                    Err(e) => findings.push(lint::Finding {
-                        file: p.display().to_string(),
-                        line: 0,
-                        severity: Severity::Error,
-                        category: "policy",
-                        message: miette_str(&e),
-                    }),
+                    Err(e) => findings.push(lint::Finding::new(
+                        p.display().to_string(),
+                        0,
+                        Severity::Error,
+                        "policy",
+                        miette_str(&e),
+                    )),
                 }
             }
             let (ne, nw, ni) = (
@@ -327,21 +366,51 @@ fn run(cli: Cli) -> Result<ExitCode> {
                     .filter(|f| f.severity == Severity::Info)
                     .count(),
             );
-            if json {
-                println!("{}", serde_json::to_string_pretty(&findings)?);
-            } else {
-                for f in &findings {
-                    let sev = format!("{:?}", f.severity).to_lowercase();
-                    println!(
-                        "{}:{}: {sev}[{}]: {}",
-                        f.file, f.line, f.category, f.message
+            match format {
+                LintFormat::Json => println!("{}", serde_json::to_string_pretty(&findings)?),
+                LintFormat::Compact => {
+                    for f in &findings {
+                        let sev = format!("{:?}", f.severity).to_lowercase();
+                        println!(
+                            "{}:{}: {sev}[{}]: {}",
+                            f.file, f.line, f.category, f.message
+                        );
+                    }
+                }
+                LintFormat::Human => {
+                    use std::io::IsTerminal;
+                    let env = |k: &str| std::env::var(k).ok();
+                    let style = Style {
+                        color: report::resolve_color(
+                            match color {
+                                ColorArg::Auto => ColorMode::Auto,
+                                ColorArg::Always => ColorMode::Always,
+                                ColorArg::Never => ColorMode::Never,
+                            },
+                            std::io::stdout().is_terminal(),
+                            &env,
+                        ),
+                        icons: !no_icons && report::resolve_icons(&env),
+                    };
+                    let lines_of = |file: &str| -> Option<Vec<String>> {
+                        if let Some(src) = s.sources.iter().find(|x| x.rel == file) {
+                            return Some(src.lexed.raw.clone());
+                        }
+                        let text = std::fs::read_to_string(root.join(file)).ok()?;
+                        Some(text.lines().map(str::to_string).collect())
+                    };
+                    print!(
+                        "{}",
+                        report::render(&findings, &lines_of, style, s.directives.len())
                     );
                 }
             }
-            eprintln!(
-                "lint: {} directive(s); {ne} error(s), {nw} warning(s), {ni} info",
-                s.directives.len()
-            );
+            if format != LintFormat::Human {
+                eprintln!(
+                    "lint: {} directive(s); {ne} error(s), {nw} warning(s), {ni} info",
+                    s.directives.len()
+                );
+            }
             Ok(if ne > 0 || (deny_warnings && nw > 0) {
                 ExitCode::from(1)
             } else {

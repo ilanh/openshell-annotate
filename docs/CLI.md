@@ -96,11 +96,36 @@ Options:
       --deny-warnings
           Exit 1 on warnings too
 
-      --json
+      --format <FORMAT>
+          Output format
 
+          Possible values:
+          - human:   Multi-line report with source context, underlines, icons and suggested fixes
+          - json:    JSON array of findings (stable)
+          - compact: One line per finding: `file:line: severity[category]: message` (stable; for scripts and CI logs)
+
+          [default: human]
+
+      --json
+          Alias for `--format json`
+
+      --color <COLOR>
+          Colour for the human format
+
+          Possible values:
+          - auto:   Colour when stdout is a terminal; honours NO_COLOR, CLICOLOR_FORCE and TERM=dumb
+          - always
+          - never
+
+          [default: auto]
+
+      --no-icons
+          Plain ASCII in the human format (no emoji or Unicode icons). Icons also turn off by themselves when the locale is not UTF-8 or TERM=dumb
+
+          [alias: --ascii]
 
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `openshell-annotate diff-logs`

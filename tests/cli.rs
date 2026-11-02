@@ -349,7 +349,7 @@ fn lint_flags_unannotated_calls_and_honours_ignore() {
         "import { writeFileSync } from \"node:fs\";\nexport async function f() {\n  const r = await fetch(\"https://api.stripe.com/v1/charges\");\n  writeFileSync(\"/srv/x\", \"a\");\n  const k = process.env.STRIPE_API_KEY;\n  const m = \"fetch(not code)\"; // fetch(also not code)\n  writeFileSync(\"/tmp/y\", \"baseline\");\n  obj.fetch(\"relative\");\n}\n",
     )
     .unwrap();
-    let o = run(t.path(), &["lint"]);
+    let o = run(t.path(), &["lint", "--format", "compact"]);
     assert!(o.status.success());
     let s = out(&o);
     assert!(s.contains("src/raw.ts:3: warning[net]: fetch() without an @openshell directive (suggest: @openshell egress api.stripe.com:443"), "{s}");
@@ -408,7 +408,7 @@ fn lint_python_go_shell_call_sites_and_test_files_excluded() {
         "fetch(\"https://ignored.test\")\n",
     )
     .unwrap();
-    let s = out(&run(t.path(), &["lint"]));
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
     assert!(s.contains("src/x.py:2: warning[net]: requests"), "{s}");
     assert!(
         s.contains("src/x.py:3: warning[fs]: open() for writing"),
@@ -442,11 +442,17 @@ fn lint_python_go_shell_call_sites_and_test_files_excluded() {
 fn lint_checks_a_policy_file() {
     let t = fixture();
     std::fs::write(t.path().join("bad.yaml"), "version: 1\nprocess:\n  run_as_user: \"0\"\nnetwork_policies:\n  x:\n    endpoints:\n      - host: \"*.com\"\n        port: 443\n    binaries: []\nbogus: 1\n").unwrap();
-    let o = run(t.path(), &["lint", "--policy", "bad.yaml"]);
+    let o = run(
+        t.path(),
+        &["lint", "--format", "compact", "--policy", "bad.yaml"],
+    );
     assert_eq!(o.status.code(), Some(1));
     assert!(out(&o).contains("unknown field 'bogus'"), "{}", out(&o));
     std::fs::write(t.path().join("bad.yaml"), "version: 1\nprocess:\n  run_as_user: \"0\"\nnetwork_policies:\n  x:\n    endpoints:\n      - host: \"*.com\"\n        port: 443\n    binaries: []\n").unwrap();
-    let s = out(&run(t.path(), &["lint", "--policy", "bad.yaml"]));
+    let s = out(&run(
+        t.path(),
+        &["lint", "--format", "compact", "--policy", "bad.yaml"],
+    ));
     assert!(
         s.contains("run_as_user") && s.contains("root is rejected"),
         "{s}"
@@ -731,7 +737,7 @@ fn lint_ast_classifies_fs_write_paths_and_summarises_dynamic_ones() {
         "import fs from \"node:fs\";\nimport path from \"node:path\";\nimport os from \"node:os\";\nexport function f(id: string, dir: string) {\n  fs.writeFileSync(\"/workspace/data/a\", \"x\");\n  fs.writeFileSync(path.join(os.tmpdir(), \"b\"), \"x\");\n  fs.writeFileSync(`/workspace/data/${id}`, \"x\");\n  fs.writeFileSync(`/var/lib/app/${id}`, \"x\");\n  fs.mkdirSync(path.join(\"/srv/app\", id));\n  fs.writeFileSync(path.join(dir, \"c\"), \"x\");\n  fs.writeFileSync(dir + \"/d\", \"x\");\n}\n",
     )
     .unwrap();
-    let s = out(&run(t.path(), &["lint"]));
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
     assert!(
         !s.contains("src/w.ts:5") && !s.contains("src/w.ts:6") && !s.contains("src/w.ts:7"),
         "{s}"
@@ -782,7 +788,7 @@ fn lint_ast_without_any_fs_root_warns_once_per_file() {
         "def f(p, q):\n    open(p, \"w\")\n    open(q, \"wb\")\n    open(p)\n",
     )
     .unwrap();
-    let s = out(&run(t.path(), &["lint"]));
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
     let n = s
         .lines()
         .filter(|l| l.starts_with("src/w.py") && l.contains("warning[fs]"))
@@ -816,7 +822,7 @@ fn lint_ast_resolves_urls_against_declared_egress_and_reads_python_go_shell_synt
         "import requests, os\nrequests.get(\"https://huggingface.co/api/models\")\nrequests.get(\"https://api.acme-z.dev/x\")\nurl = \"https://cdn.acme-y.dev/f\"\nw = os.environ.get(\"MY_API_KEY\")\nopen(\"/tmp/f\", \"w\")\nopen(\"/tmp/f\", mode=\"rb\")\nx = \"requests.get('https://nope.test')\"\n",
     )
     .unwrap();
-    let s = out(&run(t.path(), &["lint"]));
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
     assert!(!s.contains("src/u.py:2"), "{s}");
     assert!(
         s.contains("src/u.py:3: warning[net]") && s.contains("api.acme-z.dev:443"),
@@ -836,7 +842,7 @@ fn lint_ast_resolves_urls_against_declared_egress_and_reads_python_go_shell_synt
     );
     // shell: expansions and redirections come from the AST
     std::fs::write(t.path().join("scripts/y.sh"), "echo \"$MY_SECRET_TOKEN\" > \"$TMPDIR/x\"\nwget -q https://dl.acme-q.dev/a.tgz -O /srv/a.tgz\nls 2>&1 >&2\n").unwrap();
-    let s = out(&run(t.path(), &["lint"]));
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
     assert!(
         s.contains("scripts/y.sh:1: warning[env]") && s.contains("MY_SECRET_TOKEN"),
         "{s}"
@@ -863,7 +869,7 @@ fn lint_regex_engine_is_still_available() {
         "export const a = fetch(\"https://api.acme-r.dev/x\");\n",
     )
     .unwrap();
-    let s = out(&run(t.path(), &["lint"]));
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
     assert!(s.contains("src/r.ts:1: warning[net]: fetch()"), "{s}");
 }
 
@@ -880,7 +886,7 @@ fn lint_ast_follows_fs_imports_and_aliases() {
         "function mkdir(p: string) {}\nmkdir(\"/srv/z\");\n",
     )
     .unwrap();
-    let s = out(&run(t.path(), &["lint"]));
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
     assert!(
         s.contains("src/imp.ts:4: warning[fs]") && s.contains("(mkdir) to /srv/a"),
         "{s}"
@@ -972,7 +978,7 @@ fn diff_logs_ignore_host_declines_a_denial_on_purpose() {
         "// @openshell ignore host=x.example.com reason=\"r\"\n",
     )
     .unwrap();
-    let o = run(t.path(), &["lint"]);
+    let o = run(t.path(), &["lint", "--format", "compact"]);
     assert!(
         out(&o).contains("ignore host=... needs kind=net"),
         "{}{}",
@@ -996,5 +1002,306 @@ fn js_directives_survive_regex_literals_that_confuse_a_lexer() {
         "{}{}",
         out(&o),
         err(&o)
+    );
+}
+
+// ---- human lint report ------------------------------------------------------------------------------------------------
+
+/// Project with one finding of each kind the report formats: a directive error, net, fs, env and exec.
+fn report_fixture() -> tempfile::TempDir {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(t.path().join("src")).unwrap();
+    std::fs::write(
+        t.path().join("src/app.js"),
+        "import { writeFileSync } from \"node:fs\";\nimport { spawn } from \"node:child_process\";\nexport async function f() {\n  const key = process.env.ACME_API_KEY;\n  const r = await fetch(\"https://api.acme.io/v1/items\");\n  writeFileSync(\"/srv/data/items.json\", \"[]\");\n  spawn(\"git\", [\"fetch\"]);\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        t.path().join("src/job.py"),
+        "import requests\n\ndef run(url):\n    return requests.get(url)\n",
+    )
+    .unwrap();
+    std::fs::write(
+        t.path().join("src/setup.sh"),
+        "#!/bin/sh\n# @openshell frobnicate x\n",
+    )
+    .unwrap();
+    t
+}
+
+/// Run with a controlled environment (the host's LANG/TERM/NO_COLOR must not leak into snapshots).
+fn run_env(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
+    let mut c = Command::new(bin());
+    c.current_dir(dir).args(args);
+    for k in [
+        "NO_COLOR",
+        "CLICOLOR_FORCE",
+        "TERM",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+    ] {
+        c.env_remove(k);
+    }
+    for (k, v) in env {
+        c.env(k, v);
+    }
+    c.output().unwrap()
+}
+
+/// Compare with `tests/golden/<name>`; `UPDATE_GOLDEN=1 cargo test` rewrites the file (review the diff!).
+fn golden(name: &str, actual: &str) {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/golden")
+        .join(name);
+    if std::env::var_os("UPDATE_GOLDEN").is_some() {
+        std::fs::write(&p, actual).unwrap();
+        return;
+    }
+    let want = std::fs::read_to_string(&p).unwrap_or_else(|_| panic!("missing golden {name}"));
+    assert_eq!(
+        want, actual,
+        "golden {name} differs; rerun with UPDATE_GOLDEN=1 if intended"
+    );
+}
+
+#[test]
+fn lint_human_plain_snapshot() {
+    let t = report_fixture();
+    let o = run_env(t.path(), &["lint", "--color", "never", "--no-icons"], &[]);
+    assert_eq!(o.status.code(), Some(1), "{}", err(&o));
+    let s = out(&o);
+    assert!(
+        !s.contains('\x1b') && s.is_ascii(),
+        "plain output must be ASCII: {s}"
+    );
+    golden("lint_human_plain.txt", &s);
+    // the human report carries its own summary; stderr stays quiet
+    assert_eq!(err(&o), "");
+}
+
+#[test]
+fn lint_human_icons_and_colour_snapshot() {
+    let t = report_fixture();
+    let utf8 = [("LANG", "en_US.UTF-8"), ("TERM", "xterm-256color")];
+    let o = run_env(t.path(), &["lint", "--color", "always"], &utf8);
+    let s = out(&o);
+    assert!(
+        s.contains("\u{26a0} \u{1f310} \x1b") || s.contains("\u{26a0} \u{1f310} warning[net]"),
+        "{s}"
+    );
+    golden("lint_human_color.txt", &s);
+    // icons without colour, then the same text with the icons removed matches the ASCII run
+    let o = run_env(t.path(), &["lint", "--color", "never"], &utf8);
+    let s = out(&o);
+    for icon in [
+        "\u{2716} \u{1f4dd} error[directive]",
+        "\u{26a0} \u{1f310} warning[net]",
+        "\u{26a0} \u{1f4c1} warning[fs]",
+        "\u{26a0} \u{1f511} warning[env]",
+        "\u{2139} \u{2699}\u{fe0f} info[exec]",
+    ] {
+        assert!(s.contains(icon), "missing `{icon}` in {s}");
+    }
+    assert!(
+        s.contains("\u{1f4c4} src/app.js") && s.contains("by category:"),
+        "{s}"
+    );
+}
+
+#[test]
+fn lint_human_shows_context_underline_and_a_copy_pasteable_directive() {
+    let t = report_fixture();
+    let s = out(&run_env(
+        t.path(),
+        &["lint", "--color", "never", "--no-icons"],
+        &[],
+    ));
+    // location with line:col, gutter, the offending call underlined from its start
+    assert!(s.contains(" --> src/app.js:5:19\n"), "{s}");
+    assert!(
+        s.contains("5 |   const r = await fetch(\"https://api.acme.io/v1/items\");\n"),
+        "{s}"
+    );
+    assert!(s.contains("\n  |                   ^^^^^"), "{s}");
+    // Python/shell use `#` comments, JS `//`
+    assert!(
+        s.contains("= help: declare the host this call connects to, on the line above:\n"),
+        "{s}"
+    );
+    assert!(
+        s.contains("# @openshell egress <host>:443 reason=\"...\""),
+        "{s}"
+    );
+    assert!(
+        s.contains("// @openshell fs write /srv/data reason=\"...\""),
+        "{s}"
+    );
+    assert!(s.contains("// @openshell provider ACME_API_KEY"), "{s}");
+    // findings are grouped per file, with a summary
+    assert!(s.contains("src/app.js  (4 findings)"), "{s}");
+    assert!(s.contains("src/job.py  (1 finding)"), "{s}");
+    assert!(s.contains("1 error, 4 warnings, 1 info"), "{s}");
+    assert!(s.contains("src/setup.sh  (1 finding)"), "{s}");
+}
+
+#[test]
+fn lint_ascii_fallback_without_a_utf8_locale_or_on_a_dumb_terminal() {
+    let t = report_fixture();
+    for env in [
+        vec![("LANG", "C")],
+        vec![],
+        vec![("LANG", "en_US.UTF-8"), ("TERM", "dumb")],
+    ] {
+        let s = out(&run_env(t.path(), &["lint", "--color", "never"], &env));
+        assert!(s.is_ascii(), "{env:?}: {s}");
+    }
+    let s = out(&run_env(
+        t.path(),
+        &["lint", "--color", "never", "--ascii"],
+        &[("LANG", "en_US.UTF-8")],
+    ));
+    assert!(s.is_ascii(), "--ascii: {s}");
+}
+
+#[test]
+fn lint_colour_flag_and_environment() {
+    let t = report_fixture();
+    let has = |o: Output| out(&o).contains("\x1b[");
+    // not a terminal: auto means no colour; the flag forces it either way
+    assert!(!has(run_env(t.path(), &["lint"], &[])));
+    assert!(has(run_env(t.path(), &["lint", "--color", "always"], &[])));
+    assert!(!has(run_env(
+        t.path(),
+        &["lint", "--color", "never"],
+        &[("CLICOLOR_FORCE", "1")]
+    )));
+    // CLICOLOR_FORCE colours a pipe; NO_COLOR wins over it in auto mode
+    assert!(has(run_env(
+        t.path(),
+        &["lint"],
+        &[("CLICOLOR_FORCE", "1")]
+    )));
+    assert!(!has(run_env(
+        t.path(),
+        &["lint"],
+        &[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "1")]
+    )));
+}
+
+#[test]
+fn lint_machine_formats_are_stable_and_exit_codes_do_not_depend_on_the_format() {
+    let t = report_fixture();
+    let compact = out(&run(t.path(), &["lint", "--format", "compact"]));
+    assert!(
+        compact.contains("src/app.js:5: warning[net]: fetch() without an @openshell directive"),
+        "{compact}"
+    );
+    assert!(
+        !compact.contains('\x1b') && !compact.contains("-->"),
+        "{compact}"
+    );
+    // `--json` is an alias of `--format json`, and its shape is unchanged (no new keys)
+    let a = out(&run(t.path(), &["lint", "--json"]));
+    let b = out(&run(t.path(), &["lint", "--format", "json"]));
+    assert_eq!(a, b);
+    let v: serde_json::Value = serde_json::from_str(&a).unwrap();
+    let first = v[0].as_object().unwrap();
+    let mut keys: Vec<&str> = first.keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["category", "file", "line", "message", "severity"]);
+    // contradictory flags are a usage error
+    assert_eq!(
+        run(t.path(), &["lint", "--json", "--format", "compact"])
+            .status
+            .code(),
+        Some(2)
+    );
+    // exit codes: errors fail every format; warnings only with --deny-warnings
+    for fmt in ["human", "json", "compact"] {
+        assert_eq!(
+            run(t.path(), &["lint", "--format", fmt]).status.code(),
+            Some(1),
+            "{fmt}"
+        );
+    }
+    std::fs::write(
+        t.path().join("src/app.js"),
+        "// @openshell ignore kind=net reason=\"x\" scope=file\nfetch(u);\n",
+    )
+    .unwrap();
+    std::fs::remove_file(t.path().join("src/job.py")).unwrap();
+    std::fs::remove_file(t.path().join("src/setup.sh")).unwrap();
+    for fmt in ["human", "json", "compact"] {
+        assert_eq!(
+            run(t.path(), &["lint", "--format", fmt]).status.code(),
+            Some(0),
+            "{fmt}"
+        );
+    }
+    let clean = out(&run_env(
+        t.path(),
+        &["lint", "--no-icons", "--color", "never"],
+        &[],
+    ));
+    assert!(clean.starts_with("no findings (1 directive(s))"), "{clean}");
+}
+
+#[test]
+fn lint_human_handles_policy_files_long_lines_tabs_and_project_wide_findings() {
+    let t = report_fixture();
+    std::fs::write(t.path().join("bad.yaml"), "version: 1\nnetwork_policies:\n  x:\n    endpoints:\n      - host: \"*.com\"\n        port: 443\n    binaries: []\n").unwrap();
+    let pad = " ".repeat(200);
+    std::fs::write(
+        t.path().join("src/long.js"),
+        format!("function g() {{\n\tconst x = \"é\"; {pad}fetch(\"https://long.acme.io/\");\n}}\n"),
+    )
+    .unwrap();
+    let s = out(&run_env(
+        t.path(),
+        &[
+            "lint",
+            "--policy",
+            "bad.yaml",
+            "--color",
+            "never",
+            "--no-icons",
+        ],
+        &[],
+    ));
+    assert!(
+        s.contains("bad.yaml  (2 findings)") || s.contains("bad.yaml  (1 finding)"),
+        "{s}"
+    );
+    assert!(
+        s.contains("warning[policy]: empty `binaries` matches no executable"),
+        "{s}"
+    );
+    assert!(s.contains("= note: at `network_policies.x`"), "{s}");
+    // the long line is windowed around the call; no source line exceeds the display cap
+    assert!(s.contains("src/long.js:2:"), "{s}");
+    assert!(s.lines().all(|l| l.chars().count() < 200), "{s}");
+    assert!(
+        s.contains("2 | ...") && s.contains("fetch(\"https://long.acme.io/\")"),
+        "{s}"
+    );
+}
+
+#[test]
+fn lint_human_puts_a_long_usage_message_under_help() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("a.sh"), "#!/bin/sh\n# @openshell egress\n").unwrap();
+    let s = out(&run_env(
+        t.path(),
+        &["lint", "--color", "never", "--no-icons"],
+        &[],
+    ));
+    assert!(
+        s.contains("error[directive]: malformed @openshell directive\n --> a.sh:2:3\n"),
+        "{s}"
+    );
+    assert!(
+        s.contains("= help: expected syntax: egress <host>:<port>"),
+        "{s}"
     );
 }

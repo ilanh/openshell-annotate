@@ -1,0 +1,85 @@
+src/app.js  (4 findings)
+
+warning[env]: secret-like variable ACME_API_KEY is read but no provider declares it
+ --> src/app.js:4:15
+  |
+2 | import { spawn } from "node:child_process";
+3 | export async function f() {
+4 |   const key = process.env.ACME_API_KEY;
+  |               ^^^^^^^^^^^^^^^^^^^^^^^^ reads ACME_API_KEY
+5 |   const r = await fetch("https://api.acme.io/v1/items");
+  |
+  = help: if an OpenShell provider supplies it, declare it:
+          // @openshell provider ACME_API_KEY
+          if it is not a credential:
+          // @openshell ignore kind=env reason="..."
+
+warning[net]: unannotated network call to api.acme.io:443
+ --> src/app.js:5:19
+  |
+3 | export async function f() {
+4 |   const key = process.env.ACME_API_KEY;
+5 |   const r = await fetch("https://api.acme.io/v1/items");
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ fetch() reaches api.acme.io:443 with no matching @openshell egress
+6 |   writeFileSync("/srv/data/items.json", "[]");
+  |
+  = help: declare the destination on the line above:
+          // @openshell egress api.acme.io:443 reason="..."
+  = note: a directive covers calls on its own line and up to 8 lines below it (`scope=file` covers the whole file)
+
+warning[fs]: filesystem write to /srv/data/items.json is outside the sandbox
+ --> src/app.js:6:3
+  |
+4 |   const key = process.env.ACME_API_KEY;
+5 |   const r = await fetch("https://api.acme.io/v1/items");
+6 |   writeFileSync("/srv/data/items.json", "[]");
+  |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ filesystem write (writeFileSync)
+7 |   spawn("git", ["fetch"]);
+  |
+  = help: allow writes to the directory:
+          // @openshell fs write /srv/data reason="..."
+          or, if this is not a real write:
+          // @openshell ignore kind=fs reason="..."
+  = note: the sandbox may write only under /tmp and the declared `fs write` roots
+
+info[exec]: subprocess runs a program the policy does not describe
+ --> src/app.js:7:3
+  |
+5 |   const r = await fetch("https://api.acme.io/v1/items");
+6 |   writeFileSync("/srv/data/items.json", "[]");
+7 |   spawn("git", ["fetch"]);
+  |   ^^^^^^^^^^^^^^^^^^^^^^^ subprocess
+8 | }
+  |
+  = help: if the program opens its own connections, add `bin=<path>` to its egress directive; otherwise:
+          // @openshell ignore kind=exec reason="..."
+  = note: OpenShell matches network rules on the spawned binary, not on this script
+
+src/job.py  (1 finding)
+
+warning[net]: network call with no literal destination
+ --> src/job.py:4:12
+  |
+2 |
+3 | def run(url):
+4 |     return requests.get(url)
+  |            ^^^^^^^^^^^^^^^^^ requests: destination is not a string literal
+  |
+  = help: declare the host this call connects to, on the line above:
+          # @openshell egress <host>:443 reason="..."
+          or, if it is not real egress:
+          # @openshell ignore kind=net reason="..."
+  = note: a directive covers calls on its own line and up to 8 lines below it (`scope=file` covers the whole file)
+
+src/setup.sh  (1 finding)
+
+error[directive]: unknown directive `frobnicate`; expected one of: egress, provider, fs, bin, process, ignore
+ --> src/setup.sh:2:3
+  |
+1 | #!/bin/sh
+2 | # @openshell frobnicate x
+  |   ^^^^^^^^^^^^^^^^^^^^^^^
+  |
+
+1 error, 4 warnings, 1 info  (6 findings in 3 files; 0 directives)
+by category: directive 1, env 1, exec 1, fs 1, net 2

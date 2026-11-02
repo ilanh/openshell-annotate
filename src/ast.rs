@@ -22,6 +22,10 @@ pub enum Pth {
 #[derive(Debug, Clone)]
 pub struct Site {
     pub line: usize,
+    /// 0-based byte column of the node start within its line.
+    pub col: usize,
+    /// 0-based byte column where the node ends on the same line (`None`: it continues on later lines).
+    pub end_col: Option<usize>,
     /// `net` | `fs` | `env` | `exec`
     pub cat: &'static str,
     pub what: String,
@@ -161,8 +165,11 @@ pub fn is_covered_path(p: &Pth, fs_roots: &[String]) -> bool {
 // ---------------------------------------------------------------------------------------------------------------------
 
 fn push(out: &mut Vec<Site>, n: Node, cat: &'static str, what: impl Into<String>) -> usize {
+    let (a, b) = (n.start_position(), n.end_position());
     out.push(Site {
         line: line_of(n),
+        col: a.column,
+        end_col: (a.row == b.row).then_some(b.column),
         cat,
         what: what.into(),
         env: None,

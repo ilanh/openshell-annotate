@@ -85,7 +85,8 @@ def save(p, b):
 PY
 
 openshell-annotate scan             # 2 directive(s) (a file without directives is counted too)
-openshell-annotate lint             # warning[net] src/telemetry.js:1: fetch() without an @openshell directive
+openshell-annotate lint             # warning[net]: unannotated network call to telemetry.example.net:443 (--> src/telemetry.js:1:1, with context and a fix)
+openshell-annotate lint --format compact   # same findings, one line each: src/telemetry.js:1: warning[net]: fetch() without ...
 openshell-annotate lint --deny-warnings; echo $?        # 1 (a warning now fails)
 sed -i '1i // @openshell egress telemetry.example.net:443 reason="usage ping" allow="POST:/ping"' src/telemetry.js
 openshell-annotate lint --deny-warnings; echo $?        # 0

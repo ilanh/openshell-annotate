@@ -33,7 +33,7 @@ reason and `file:line`. You never hand-edit the generated policy.
 Run the linter first; it lists un-annotated call sites it can recognise:
 
 ```
-openshell-annotate lint            # tree-sitter: warnings = unannotated net / fs write outside declared roots / secret reads; info = subprocesses, URL literals, computed-path fs writes
+openshell-annotate lint --format compact   # one line per finding (the default `human` report is longer; use `--format compact` or `--json` when parsing). tree-sitter: warnings = unannotated net / fs write outside declared roots / secret reads; info = subprocesses, URL literals, computed-path fs writes
 ```
 
 Then search for what a regex linter cannot see. Look for, at least:
@@ -113,7 +113,7 @@ git clone https://github.com/o/r.git /workspace/r
 ```
 openshell-annotate scan                                   # every directive with file:line; parse errors fail here
 openshell-annotate generate -o openshell/policy.yaml --providers-out openshell/providers.sh
-openshell-annotate lint --policy openshell/policy.yaml    # directive errors + remaining unannotated calls + policy sanity
+openshell-annotate lint --format compact --policy openshell/policy.yaml    # directive errors + remaining unannotated calls + policy sanity
 openshell-annotate drift --policy openshell/policy.yaml   # must say "no drift" after generate
 ```
 

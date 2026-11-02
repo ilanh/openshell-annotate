@@ -36,11 +36,47 @@ const r = await fetch("https://api.openai.com/v1/chat/completions", { ... });
 |---|---|
 | `scan [PATHS] [--json]` | list directives with `file:line` (JS/TS, Python, Go, shell, Dockerfile comments; string-aware lexer) |
 | `generate [PATHS] -o policy.yaml [--providers-out f.json\|f.sh] [--profiles-dir DIR]` | emit policy.yaml with a comment per entry; re-validated with the OpenShell schema crate; providers as JSON or a setup script |
-| `lint [PATHS] [--policy policy.yaml] [--deny-warnings]` | directive validation + tree-sitter detection (JS/TS, Python, Go, bash) of un-annotated network calls, URL literals, filesystem writes, secret reads, subprocesses; sanity-checks a policy file |
+| `lint [PATHS] [--policy policy.yaml] [--deny-warnings] [--format human\|json\|compact] [--color auto\|always\|never] [--no-icons]` | directive validation + tree-sitter detection (JS/TS, Python, Go, bash) of un-annotated network calls, URL literals, filesystem writes, secret reads, subprocesses; sanity-checks a policy file |
 | `diff-logs LOG... [--write] [--deny-stale] [--json]` | map sandbox allow/deny events (`openshell logs` shorthand or OCSF JSONL, `-` = stdin) to directives by binary, host, port: suggests missing directives (`--write` inserts them), flags stale ones, separates non-actionable (SSRF/metadata) and declined (`ignore kind=net host=`) denials; exit 1 when something is missing |
 | `drift [PATHS] --policy policy.yaml [--providers f.json] [--strict]` | regenerate in memory and compare as typed documents; reports missing / extra / changed, tagged `startup` or `live` |
 
 Exit codes: 0 clean, 1 findings/errors, 2 usage or I/O error.
+
+### Lint output
+
+`lint` prints a rustc-style report by default: a header per finding with severity and category icons, the location, the
+source lines around it with the offending call underlined, and a copy-pasteable `@openshell` directive under `= help:`.
+Findings are grouped by file and end with a summary by severity and category.
+
+```text
+warning[net]: unannotated network call to api.github.com:443
+ --> src/server.ts:6:21
+  |
+5 |   const token = process.env.GITHUB_TOKEN;
+6 |   const res = await fetch("https://api.github.com/repos/o/r/issues", {
+  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ fetch() reaches api.github.com:443 ...
+7 |     headers: { Authorization: `Bearer ${token}` },
+  |
+  = help: declare the destination on the line above:
+          // @openshell egress api.github.com:443 reason="..."
+```
+
+| Category | Icon | Meaning |
+|---|---|---|
+| `net` | 🌐 | network call or URL literal with no matching `egress` |
+| `fs` | 📁 | filesystem write outside `/tmp` and the declared `fs write` roots |
+| `env` | 🔑 | secret-like environment variable with no `provider` |
+| `exec` | ⚙️ | subprocess the policy does not describe |
+| `directive` | 📝 | malformed `@openshell` directive |
+| `policy` | 📜 | problem in the `--policy` file |
+
+Severities are `✖ error`, `⚠ warning` and `ℹ info`. Colour is on for a terminal and off otherwise; `--color always|never` overrides
+it, and `NO_COLOR` / `CLICOLOR_FORCE` are honoured in `auto` mode. Icons fall back to plain ASCII with `--no-icons` (alias
+`--ascii`), a non-UTF-8 locale or `TERM=dumb`.
+
+For scripts, CI and AI agents use a stable format: `--format compact` prints one `file:line: severity[category]: message` line per
+finding, and `--format json` (alias `--json`) prints the JSON array. Both keep the old `lint: N directive(s); ...` summary on
+stderr. Exit codes and `--deny-warnings` do not depend on the format.
 `--root DIR` sets the repository root (paths in output are relative to it), `--config FILE` overrides
 `<root>/openshell-annotate.toml`.
 

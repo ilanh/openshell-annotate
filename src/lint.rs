@@ -25,6 +25,16 @@ pub enum Severity {
     Info,
 }
 
+/// Where on its line a finding points (0-based byte columns). Only used for the human report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Span {
+    pub col: usize,
+    /// End column on the same line; `None` = to the end of the line.
+    pub end: Option<usize>,
+}
+
+/// One lint result. Only `file`, `line`, `severity`, `category` and `message` are serialized (`--format json` and the
+/// compact one-line format are stable); the rest feeds the human report.
 #[derive(Debug, Clone, Serialize)]
 pub struct Finding {
     pub file: String,
@@ -32,6 +42,216 @@ pub struct Finding {
     pub severity: Severity,
     pub category: &'static str,
     pub message: String,
+    #[serde(skip)]
+    pub span: Option<Span>,
+    /// Short headline (falls back to `message`).
+    #[serde(skip)]
+    pub title: Option<String>,
+    /// Text printed next to the underline.
+    #[serde(skip)]
+    pub label: Option<String>,
+    /// Suggested fix, usually a copy-pasteable `@openshell` directive (may span lines).
+    #[serde(skip)]
+    pub help: Option<String>,
+    #[serde(skip)]
+    pub note: Option<String>,
+}
+
+impl Finding {
+    pub fn new(
+        file: impl Into<String>,
+        line: usize,
+        severity: Severity,
+        category: &'static str,
+        message: impl Into<String>,
+    ) -> Self {
+        Finding {
+            file: file.into(),
+            line,
+            severity,
+            category,
+            message: message.into(),
+            span: None,
+            title: None,
+            label: None,
+            help: None,
+            note: None,
+        }
+    }
+    fn at(mut self, span: Option<Span>) -> Self {
+        self.span = span;
+        self
+    }
+    fn say(
+        mut self,
+        title: String,
+        label: String,
+        help: Option<String>,
+        note: Option<String>,
+    ) -> Self {
+        self.title = Some(title);
+        self.label = Some(label);
+        self.help = help;
+        self.note = note;
+        self
+    }
+}
+
+/// Comment syntax + window used to print copy-pasteable directives.
+struct Hints {
+    leader: &'static str,
+    window: usize,
+}
+
+impl Hints {
+    fn new(lang: Language, cfg: &Config) -> Self {
+        Hints {
+            leader: match lang {
+                Language::Python | Language::Shell => "#",
+                _ => "//",
+            },
+            window: cfg.lint.window,
+        }
+    }
+    fn dir(&self, d: &str) -> String {
+        format!("{} @openshell {d}", self.leader)
+    }
+    fn ignore(&self, kind: &str) -> String {
+        self.dir(&format!("ignore kind={kind} reason=\"...\""))
+    }
+    fn net_call(&self, f: Finding, what: &str, hosts: &[String]) -> Finding {
+        if hosts.is_empty() {
+            let help = format!(
+                "declare the host this call connects to, on the line above:\n{}\nor, if it is not real egress:\n{}",
+                self.dir("egress <host>:443 reason=\"...\""),
+                self.ignore("net")
+            );
+            f.say(
+                "network call with no literal destination".into(),
+                format!("{what}: destination is not a string literal"),
+                Some(help),
+                Some(self.cover_note()),
+            )
+        } else {
+            let list = hosts.join(", ");
+            let help = format!(
+                "declare the destination on the line above:\n{}",
+                self.dir(&format!("egress {list} reason=\"...\""))
+            );
+            f.say(
+                format!("unannotated network call to {list}"),
+                format!(
+                    "{what} reaches {} with no matching @openshell egress",
+                    hosts[0]
+                ),
+                Some(help),
+                Some(self.cover_note()),
+            )
+        }
+    }
+    fn cover_note(&self) -> String {
+        format!(
+            "a directive covers calls on its own line and up to {} lines below it (`scope=file` covers the whole file)",
+            self.window
+        )
+    }
+    fn url_literal(&self, f: Finding, host: &str, all: &[String]) -> Finding {
+        f.say(
+            format!("URL literal to {host} has no matching egress"),
+            "this URL is not covered by any @openshell egress".into(),
+            Some(format!(
+                "if the program connects there, declare it:\n{}",
+                self.dir(&format!("egress {} reason=\"...\"", all.join(", ")))
+            )),
+            None,
+        )
+    }
+    fn fs_literal(&self, f: Finding, what: &str, path: &str) -> Finding {
+        let dir = match path.strip_suffix('/') {
+            Some(d) if !d.is_empty() => d,
+            _ => match path.rsplit_once('/') {
+                Some((d, _)) if !d.is_empty() => d,
+                _ => path,
+            },
+        };
+        f.say(
+            format!("filesystem write to {path} is outside the sandbox"),
+            what.to_string(),
+            Some(format!(
+                "allow writes to the directory:\n{}\nor, if this is not a real write:\n{}",
+                self.dir(&format!("fs write {dir} reason=\"...\"")),
+                self.ignore("fs")
+            )),
+            Some("the sandbox may write only under /tmp and the declared `fs write` roots".into()),
+        )
+    }
+    fn fs_generic(&self, f: Finding, what: &str) -> Finding {
+        f.say(
+            format!("{what} without an @openshell directive"),
+            what.to_string(),
+            Some(format!(
+                "allow writes to the directory:\n{}\nor, if this is not a real write:\n{}",
+                self.dir("fs write <absolute in-sandbox dir> reason=\"...\""),
+                self.ignore("fs")
+            )),
+            Some("the sandbox may write only under /tmp and the declared `fs write` roots".into()),
+        )
+    }
+    fn fs_dynamic(&self, f: Finding, n: usize, note: String, with_help: bool) -> Finding {
+        let help = with_help.then(|| {
+            format!(
+                "declare where the app may write:\n{}\nor accept the whole file:\n{}",
+                self.dir("fs write <dir> reason=\"...\""),
+                self.dir("ignore kind=fs scope=file reason=\"...\"")
+            )
+        });
+        f.say(
+            format!("{n} filesystem write(s) with non-literal paths"),
+            "first write whose path is not a literal".into(),
+            help,
+            Some(note),
+        )
+    }
+    fn env(&self, f: Finding, name: &str) -> Finding {
+        f.say(
+            format!("secret-like variable {name} is read but no provider declares it"),
+            format!("reads {name}"),
+            Some(format!(
+                "if an OpenShell provider supplies it, declare it:\n{}\nif it is not a credential:\n{}",
+                self.dir(&format!("provider {name}")),
+                self.ignore("env")
+            )),
+            None,
+        )
+    }
+    fn exec(&self, f: Finding, what: &str) -> Finding {
+        f.say(
+            "subprocess runs a program the policy does not describe".into(),
+            what.to_string(),
+            Some(format!(
+                "if the program opens its own connections, add `bin=<path>` to its egress directive; otherwise:\n{}",
+                self.ignore("exec")
+            )),
+            Some("OpenShell matches network rules on the spawned binary, not on this script".into()),
+        )
+    }
+}
+
+/// A directive error; a long `usage: ...` message becomes the help text under a short headline.
+fn directive_finding(file: &str, line: usize, message: String) -> Finding {
+    let mut f = Finding::new(file, line, Severity::Error, "directive", message);
+    if let Some(usage) = f.message.strip_prefix("usage: ") {
+        f.help = Some(format!("expected syntax: {usage}"));
+        f.title = Some("malformed @openshell directive".into());
+        f.label = Some("does not match the directive syntax".into());
+    }
+    f
+}
+
+fn span_at(raw: &str, char_off: usize) -> Option<Span> {
+    raw.char_indices()
+        .nth(char_off)
+        .map(|(col, _)| Span { col, end: None })
 }
 
 const DEFAULT_EXCLUDES: &[&str] = &[
@@ -219,23 +439,11 @@ fn excluded(rel: &str, cfg: &Config) -> bool {
 pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
     let mut out = Vec::new();
     for e in &scan.errors {
-        out.push(Finding {
-            file: e.file.clone(),
-            line: e.line,
-            severity: Severity::Error,
-            category: "directive",
-            message: e.message.clone(),
-        });
+        out.push(directive_finding(&e.file, e.line, e.message.clone()));
     }
     for d in &scan.directives {
         for m in validate::check_directive(d) {
-            out.push(Finding {
-                file: d.file.clone(),
-                line: d.line,
-                severity: Severity::Error,
-                category: "directive",
-                message: m,
-            });
+            out.push(directive_finding(&d.file, d.line, m));
         }
     }
     let provider_envs: BTreeSet<&str> = scan
@@ -275,6 +483,7 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
             .iter()
             .filter(|d| d.file == src.rel)
             .collect();
+        let h = Hints::new(src.lang, cfg);
         let covered = |line: usize, cat: &str| -> bool {
             here.iter().any(|d| {
                 d.covers().contains(&cat)
@@ -293,6 +502,7 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
                         egress: &egress,
                     },
                     &covered,
+                    &h,
                     &mut out,
                     &mut dyn_fs,
                 );
@@ -349,18 +559,20 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
                             if provider_envs.contains(n.as_str()) || covered(line, "env") {
                                 continue;
                             }
-                            out.push(Finding {
-                                file: src.rel.clone(),
-                                line,
-                                severity: Severity::Warning,
-                                category: "env",
-                                message: format!("reads secret-like variable {n} with no `@openshell provider {n}`; if a provider supplies it, declare it; otherwise `@openshell ignore kind=env reason=\"...\"`"),
-                            });
+                            out.push(h.env(
+                                Finding::new(src.rel.clone(), line, Severity::Warning, "env", format!("reads secret-like variable {n} with no `@openshell provider {n}`; if a provider supplies it, declare it; otherwise `@openshell ignore kind=env reason=\"...\"`"))
+                                    .at(span_at(raw, code[..m.start()].chars().count())),
+                                &n,
+                            ));
                         }
                     }
                     "exec" => {
                         if !covered(line, "exec") {
-                            out.push(Finding { file: src.rel.clone(), line, severity: Severity::Info, category: "exec", message: format!("{}: the spawned program is the binary that opens its own connections; if it talks to the network add `bin=` on its egress, else `@openshell ignore kind=exec reason=\"...\"`", pat.what) });
+                            out.push(h.exec(
+                                Finding::new(src.rel.clone(), line, Severity::Info, "exec", format!("{}: the spawned program is the binary that opens its own connections; if it talks to the network add `bin=` on its egress, else `@openshell ignore kind=exec reason=\"...\"`", pat.what))
+                                    .at(span_at(raw, code[..m.start()].chars().count())),
+                                pat.what,
+                            ));
                         }
                     }
                     cat => {
@@ -380,12 +592,18 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
                         } else {
                             " (add `@openshell fs write <absolute in-sandbox path> reason=\"...\"`, or `@openshell ignore kind=fs`)".to_string()
                         };
-                        out.push(Finding {
-                            file: src.rel.clone(),
+                        let f = Finding::new(
+                            src.rel.clone(),
                             line,
-                            severity: Severity::Warning,
-                            category: if cat == "net" { "net" } else { "fs" },
-                            message: format!("{} without an @openshell directive{hint}", pat.what),
+                            Severity::Warning,
+                            if cat == "net" { "net" } else { "fs" },
+                            format!("{} without an @openshell directive{hint}", pat.what),
+                        )
+                        .at(span_at(raw, code[..m.start()].chars().count()));
+                        out.push(if cat == "net" {
+                            h.net_call(f, pat.what, &url_hosts(raw))
+                        } else {
+                            h.fs_generic(f, pat.what)
                         });
                     }
                 }
@@ -401,18 +619,28 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
             .take(5)
             .map(|(f, l)| format!("{f} ({})", l.len()))
             .collect();
-        out.push(Finding {
-            file: ".".into(),
-            line: 0,
-            severity: Severity::Info,
-            category: "fs",
-            message: format!(
+        let mut f = Finding::new(
+            ".",
+            0,
+            Severity::Info,
+            "fs",
+            format!(
                 "{total} filesystem write(s) in {} file(s) use non-literal paths and cannot be checked statically; they must land under the declared fs write roots ({}) or /tmp. Most: {}. Set [lint] fs_dynamic = \"info\" for one line per file.",
                 dyn_fs.len(),
                 fs_roots.join(", "),
                 top.join(", ")
             ),
-        });
+        );
+        f.title = Some(format!(
+            "{total} filesystem write(s) in {} file(s) use non-literal paths and cannot be checked statically",
+            dyn_fs.len()
+        ));
+        f.note = Some(format!(
+            "they must land under the declared fs write roots ({}) or /tmp\nmost: {}\nset [lint] fs_dynamic = \"info\" in openshell-annotate.toml for one line per file",
+            fs_roots.join(", "),
+            top.join(", ")
+        ));
+        out.push(f);
     }
     out.sort_by(|a, b| (a.severity, &a.file, a.line).cmp(&(b.severity, &b.file, b.line)));
     out
@@ -447,12 +675,14 @@ fn placeholder_host(hp: &str) -> bool {
 }
 
 /// AST-site lint for one source file.
+#[allow(clippy::too_many_arguments)]
 fn lint_sites(
     src: &Source,
     mut sites: Vec<Site>,
     cfg: &Config,
     ctx: &Ctx,
     covered: &dyn Fn(usize, &str) -> bool,
+    h: &Hints,
     out: &mut Vec<Finding>,
     dyn_fs: &mut Vec<(String, Vec<usize>)>,
 ) {
@@ -462,14 +692,12 @@ fn lint_sites(
     let mut net_lines: BTreeSet<usize> = BTreeSet::new();
     let mut seen_env: BTreeSet<(usize, String)> = BTreeSet::new();
     let mut file_dyn: Vec<usize> = Vec::new();
-    let mut push = |line: usize, severity: Severity, category: &'static str, message: String| {
-        out.push(Finding {
-            file: src.rel.clone(),
-            line,
-            severity,
-            category,
-            message,
-        });
+    let mut first_dyn_span: Option<Span> = None;
+    let mk = |s: &Site, severity: Severity, category: &'static str, message: String| {
+        Finding::new(src.rel.clone(), s.line, severity, category, message).at(Some(Span {
+            col: s.col,
+            end: s.end_col,
+        }))
     };
     // calls first so that a URL literal on the same line as a flagged call is not reported twice
     sites.sort_by_key(|s| (s.line, !s.call));
@@ -487,10 +715,10 @@ fn lint_sites(
                 {
                     continue;
                 }
-                push(s.line, Severity::Warning, "env", format!("reads secret-like variable {n} with no `@openshell provider {n}`; if a provider supplies it, declare it; otherwise `@openshell ignore kind=env reason=\"...\"`"));
+                out.push(h.env(mk(s, Severity::Warning, "env", format!("reads secret-like variable {n} with no `@openshell provider {n}`; if a provider supplies it, declare it; otherwise `@openshell ignore kind=env reason=\"...\"`")), n));
             }
             "exec" if !covered(s.line, "exec") => {
-                push(s.line, Severity::Info, "exec", format!("{}: the spawned program is the binary that opens its own connections; if it talks to the network add `bin=` on its egress, else `@openshell ignore kind=exec reason=\"...\"`", s.what));
+                out.push(h.exec(mk(s, Severity::Info, "exec", format!("{}: the spawned program is the binary that opens its own connections; if it talks to the network add `bin=` on its egress, else `@openshell ignore kind=exec reason=\"...\"`", s.what)), &s.what));
             }
             "net" => {
                 if covered(s.line, "net") {
@@ -501,6 +729,7 @@ fn lint_sites(
                     .iter()
                     .filter(|u| !host_known(ctx, u) && (s.call || !placeholder_host(u)))
                     .collect();
+                let hosts: Vec<String> = unknown.iter().map(|x| (*x).clone()).collect();
                 if s.call {
                     if !s.urls.is_empty() && unknown.is_empty() {
                         net_lines.insert(s.line);
@@ -519,15 +748,23 @@ fn lint_sites(
                         )
                     };
                     net_lines.insert(s.line);
-                    push(
-                        s.line,
-                        Severity::Warning,
-                        "net",
-                        format!("{} without an @openshell directive{hint}", s.what),
-                    );
+                    out.push(h.net_call(
+                        mk(
+                            s,
+                            Severity::Warning,
+                            "net",
+                            format!("{} without an @openshell directive{hint}", s.what),
+                        ),
+                        &s.what,
+                        &hosts,
+                    ));
                 } else if !unknown.is_empty() && !net_lines.contains(&s.line) {
                     net_lines.insert(s.line);
-                    push(s.line, Severity::Info, "net", format!("URL literal to {} has no matching @openshell egress (suggest: @openshell egress {} reason=\"...\")", unknown[0], unknown.iter().map(|x| x.as_str()).collect::<Vec<_>>().join(", ")));
+                    out.push(h.url_literal(
+                        mk(s, Severity::Info, "net", format!("URL literal to {} has no matching @openshell egress (suggest: @openshell egress {} reason=\"...\")", unknown[0], unknown.iter().map(|x| x.as_str()).collect::<Vec<_>>().join(", "))),
+                        unknown[0],
+                        &hosts,
+                    ));
                 }
             }
             "fs" => {
@@ -536,8 +773,16 @@ fn lint_sites(
                     continue;
                 }
                 match p {
-                    Pth::Literal(l) => push(s.line, Severity::Warning, "fs", format!("{} to {l}, which is outside the sandbox baseline (/tmp) and every declared fs write root (add `@openshell fs write <dir> reason=\"...\"` or `@openshell ignore kind=fs`)", s.what)),
-                    _ => file_dyn.push(s.line),
+                    Pth::Literal(l) => out.push(h.fs_literal(mk(s, Severity::Warning, "fs", format!("{} to {l}, which is outside the sandbox baseline (/tmp) and every declared fs write root (add `@openshell fs write <dir> reason=\"...\"` or `@openshell ignore kind=fs`)", s.what)), &s.what, &l)),
+                    _ => {
+                        if file_dyn.is_empty() {
+                            first_dyn_span = Some(Span {
+                                col: s.col,
+                                end: s.end_col,
+                            });
+                        }
+                        file_dyn.push(s.line);
+                    }
                 }
             }
             _ => {}
@@ -547,10 +792,25 @@ fn lint_sites(
         let first = file_dyn[0];
         let n = file_dyn.len();
         let no_roots = ctx.fs_roots.is_empty();
+        let new = |sev, msg: String| {
+            Finding::new(src.rel.clone(), first, sev, "fs", msg).at(first_dyn_span)
+        };
         if no_roots || cfg.lint.fs_dynamic == "warn" {
-            push(first, Severity::Warning, "fs", format!("{n} filesystem write(s) with non-literal paths (first here) and {}: declare where the app may write (`@openshell fs write <dir> reason=\"...\"`) or `@openshell ignore kind=fs scope=file`", if no_roots { "no `@openshell fs write` root declared anywhere" } else { "fs_dynamic = warn" }));
+            let msg = format!("{n} filesystem write(s) with non-literal paths (first here) and {}: declare where the app may write (`@openshell fs write <dir> reason=\"...\"`) or `@openshell ignore kind=fs scope=file`", if no_roots { "no `@openshell fs write` root declared anywhere" } else { "fs_dynamic = warn" });
+            let note = if no_roots {
+                "no `@openshell fs write` root is declared anywhere in the project".to_string()
+            } else {
+                "`fs_dynamic = \"warn\"` is set in openshell-annotate.toml".to_string()
+            };
+            out.push(h.fs_dynamic(new(Severity::Warning, msg), n, note, true));
         } else if cfg.lint.fs_dynamic == "info" {
-            push(first, Severity::Info, "fs", format!("{n} filesystem write(s) with non-literal paths (first here); they must land under a declared fs write root or /tmp"));
+            let msg = format!("{n} filesystem write(s) with non-literal paths (first here); they must land under a declared fs write root or /tmp");
+            out.push(h.fs_dynamic(
+                new(Severity::Info, msg),
+                n,
+                "they must land under a declared fs write root or /tmp".into(),
+                false,
+            ));
         } else {
             dyn_fs.push((src.rel.clone(), file_dyn));
         }

@@ -1,0 +1,85 @@
+[1m📄 src/app.js[0m[2m  (4 findings)[0m
+
+[1;33m⚠ 🔑 warning[env][0m[1m: secret-like variable ACME_API_KEY is read but no provider declares it[0m
+ [1;34m-->[0m src/app.js:4:15
+  [1;34m|[0m
+[1;34m2[0m [1;34m|[0m import { spawn } from "node:child_process";
+[1;34m3[0m [1;34m|[0m export async function f() {
+[1;34m4[0m [1;34m|[0m   const key = process.env.ACME_API_KEY;
+  [1;34m|[0m               [1;33m^^^^^^^^^^^^^^^^^^^^^^^^ reads ACME_API_KEY[0m
+[1;34m5[0m [1;34m|[0m   const r = await fetch("https://api.acme.io/v1/items");
+  [1;34m|[0m
+  [1;34m=[0m [1;32mhelp:[0m if an OpenShell provider supplies it, declare it:
+          // @openshell provider ACME_API_KEY
+          if it is not a credential:
+          // @openshell ignore kind=env reason="..."
+
+[1;33m⚠ 🌐 warning[net][0m[1m: unannotated network call to api.acme.io:443[0m
+ [1;34m-->[0m src/app.js:5:19
+  [1;34m|[0m
+[1;34m3[0m [1;34m|[0m export async function f() {
+[1;34m4[0m [1;34m|[0m   const key = process.env.ACME_API_KEY;
+[1;34m5[0m [1;34m|[0m   const r = await fetch("https://api.acme.io/v1/items");
+  [1;34m|[0m                   [1;33m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ fetch() reaches api.acme.io:443 with no matching @openshell egress[0m
+[1;34m6[0m [1;34m|[0m   writeFileSync("/srv/data/items.json", "[]");
+  [1;34m|[0m
+  [1;34m=[0m [1;32mhelp:[0m declare the destination on the line above:
+          // @openshell egress api.acme.io:443 reason="..."
+  [1;34m=[0m [1;36mnote:[0m a directive covers calls on its own line and up to 8 lines below it (`scope=file` covers the whole file)
+
+[1;33m⚠ 📁 warning[fs][0m[1m: filesystem write to /srv/data/items.json is outside the sandbox[0m
+ [1;34m-->[0m src/app.js:6:3
+  [1;34m|[0m
+[1;34m4[0m [1;34m|[0m   const key = process.env.ACME_API_KEY;
+[1;34m5[0m [1;34m|[0m   const r = await fetch("https://api.acme.io/v1/items");
+[1;34m6[0m [1;34m|[0m   writeFileSync("/srv/data/items.json", "[]");
+  [1;34m|[0m   [1;33m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ filesystem write (writeFileSync)[0m
+[1;34m7[0m [1;34m|[0m   spawn("git", ["fetch"]);
+  [1;34m|[0m
+  [1;34m=[0m [1;32mhelp:[0m allow writes to the directory:
+          // @openshell fs write /srv/data reason="..."
+          or, if this is not a real write:
+          // @openshell ignore kind=fs reason="..."
+  [1;34m=[0m [1;36mnote:[0m the sandbox may write only under /tmp and the declared `fs write` roots
+
+[1;36mℹ ⚙️ info[exec][0m[1m: subprocess runs a program the policy does not describe[0m
+ [1;34m-->[0m src/app.js:7:3
+  [1;34m|[0m
+[1;34m5[0m [1;34m|[0m   const r = await fetch("https://api.acme.io/v1/items");
+[1;34m6[0m [1;34m|[0m   writeFileSync("/srv/data/items.json", "[]");
+[1;34m7[0m [1;34m|[0m   spawn("git", ["fetch"]);
+  [1;34m|[0m   [1;36m^^^^^^^^^^^^^^^^^^^^^^^ subprocess[0m
+[1;34m8[0m [1;34m|[0m }
+  [1;34m|[0m
+  [1;34m=[0m [1;32mhelp:[0m if the program opens its own connections, add `bin=<path>` to its egress directive; otherwise:
+          // @openshell ignore kind=exec reason="..."
+  [1;34m=[0m [1;36mnote:[0m OpenShell matches network rules on the spawned binary, not on this script
+
+[1m📄 src/job.py[0m[2m  (1 finding)[0m
+
+[1;33m⚠ 🌐 warning[net][0m[1m: network call with no literal destination[0m
+ [1;34m-->[0m src/job.py:4:12
+  [1;34m|[0m
+[1;34m2[0m [1;34m|[0m
+[1;34m3[0m [1;34m|[0m def run(url):
+[1;34m4[0m [1;34m|[0m     return requests.get(url)
+  [1;34m|[0m            [1;33m^^^^^^^^^^^^^^^^^ requests: destination is not a string literal[0m
+  [1;34m|[0m
+  [1;34m=[0m [1;32mhelp:[0m declare the host this call connects to, on the line above:
+          # @openshell egress <host>:443 reason="..."
+          or, if it is not real egress:
+          # @openshell ignore kind=net reason="..."
+  [1;34m=[0m [1;36mnote:[0m a directive covers calls on its own line and up to 8 lines below it (`scope=file` covers the whole file)
+
+[1m📄 src/setup.sh[0m[2m  (1 finding)[0m
+
+[1;31m✖ 📝 error[directive][0m[1m: unknown directive `frobnicate`; expected one of: egress, provider, fs, bin, process, ignore[0m
+ [1;34m-->[0m src/setup.sh:2:3
+  [1;34m|[0m
+[1;34m1[0m [1;34m|[0m #!/bin/sh
+[1;34m2[0m [1;34m|[0m # @openshell frobnicate x
+  [1;34m|[0m   [1;31m^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [1;34m|[0m
+
+[1;31m✖ 1 error[0m · [1;33m⚠ 4 warnings[0m · [1;36mℹ 1 info[0m  [2m(6 findings in 3 files; 0 directives)[0m
+by category: 📝 directive 1 · 🔑 env 1 · ⚙️ exec 1 · 📁 fs 1 · 🌐 net 2
