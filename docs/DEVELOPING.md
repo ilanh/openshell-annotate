@@ -61,6 +61,27 @@ separate commit (CI will keep using 1.94 until the pin is bumped on purpose in `
 `docs/CLI.md` and `docs/DIRECTIVES.md` are generated from the code. After changing a flag, directive or attribute run
 `scripts/gen-docs.sh` and commit the result; `scripts/gen-docs.sh --check` (and `cargo test`) fail when they are stale.
 
+### Upstream compatibility (OpenShell schema changes)
+
+`Cargo.toml` pins `openshell-policy-schema` to an OpenShell tag. To see whether the code still builds and passes its
+tests (including the golden/fixture tests) against newer OpenShell code, without touching `Cargo.toml` or `Cargo.lock`:
+
+```
+scripts/upstream-compat.sh latest-release   # newest stable vX.Y.Z tag
+scripts/upstream-compat.sh main             # OpenShell HEAD
+scripts/upstream-compat.sh v0.1.7-pre.3     # any tag, branch or commit SHA
+```
+
+It builds a throwaway copy with the dependency repointed to the resolved commit, then runs `cargo build --all-targets`,
+`cargo test` and the docs check, and prints `upstream-compat: <target> @ <sha>: compatible|BROKEN` (exit 1 when broken).
+Set `CARGO_TARGET_DIR` to reuse a build cache.
+
+`.github/workflows/upstream-compat.yml` runs both targets weekly (Mondays 05:00 UTC), on manual dispatch, and on pull
+requests that touch `Cargo.toml`, `Cargo.lock` or the workflow itself. It is informational, not a required check: it never
+turns a normal PR red. A failed *scheduled* run opens (or comments on) a single issue labelled `upstream-compat` with the
+target, the upstream commit and a link to the log. The resolved upstream commit is in each run's job summary.
+When a target breaks, fix it on a branch (or bump the pin when `latest-release` moves on).
+
 ## 5. Try it on a tiny project
 
 ```

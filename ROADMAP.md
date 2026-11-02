@@ -34,3 +34,8 @@ Order matters: each milestone builds on the previous one. Nothing is published (
 - **Scope:** editor support for directives.
 - **Deliverables:** TextMate grammar highlighting `@openshell` comments, diagnostics from `lint --json`, quick-fix to insert a suggested directive, command to preview the generated `policy.yaml`. Thin client over the CLI (binary path setting or the Docker image).
 - **Depends on:** stable `--json` output of `lint`/`scan`/`generate` (add a schema doc), (2) for distribution. Marketplace publishing needs approval.
+
+## Ongoing: upstream compatibility
+- **Scope:** know early when OpenShell changes its policy schema or syntax.
+- **Done:** `scripts/upstream-compat.sh` and the weekly `upstream-compat` workflow build and test against OpenShell's newest release and `main` (informational; failures open an `upstream-compat` issue).
+- **Later:** bump the pinned tag when a new release is compatible; optionally add a prerelease target.

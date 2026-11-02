@@ -1,0 +1,87 @@
+name: Upstream compatibility
+
+# Builds and tests openshell-annotate against NVIDIA/OpenShell's newest release and its main branch,
+# so changes to the policy schema show up here before they bite users.
+# Informational only: this is NOT a required check (see .github/rulesets/protect-main.json).
+# Run the same thing locally with: scripts/upstream-compat.sh <latest-release|main>
+
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - scripts/upstream-compat.sh
+      - .github/workflows/upstream-compat.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-compat-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  compat:
+    name: compat (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    # Never turns a normal PR red; scheduled and manual runs report real failures.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      contents: read
+      issues: write # only used by the "report" step on scheduled runs
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [latest-release, main]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install 1.94 --profile minimal && rustup default 1.94
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cache/openshell-annotate-upstream-compat
+          key: ${{ runner.os }}-upstream-compat-${{ matrix.target }}-${{ hashFiles('Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-upstream-compat-${{ matrix.target }}-
+      - name: Build and test against ${{ matrix.target }}
+        id: compat
+        env:
+          UPSTREAM_COMPAT_LOG: ${{ runner.temp }}/upstream-compat.log
+        run: scripts/upstream-compat.sh "${{ matrix.target }}"
+      - name: Report failure in the upstream-compat issue
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET: ${{ matrix.target }}
+          LABEL: ${{ steps.compat.outputs.upstream_label }}
+          SHA: ${{ steps.compat.outputs.upstream_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LOG: ${{ runner.temp }}/upstream-compat.log
+        run: |
+          gh label create upstream-compat --color D93F0B --description "Broken against a newer OpenShell" 2>/dev/null || true
+          {
+            echo "**Target:** \`$TARGET\` (\`${LABEL:-unresolved}\` @ \`${SHA:-unknown}\`)"
+            echo "**Upstream commit:** https://github.com/NVIDIA/OpenShell/commit/${SHA:-}"
+            echo "**Run / full log:** $RUN_URL"
+            echo
+            echo "Last lines of the log:"
+            echo '```'
+            tail -n 40 "$LOG" 2>/dev/null || echo "(no log captured)"
+            echo '```'
+          } > "$RUNNER_TEMP/body.md"
+          existing=$(gh issue list --label upstream-compat --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --label upstream-compat \
+              --title "Upstream compatibility: build/tests fail against newer OpenShell" \
+              --body-file "$RUNNER_TEMP/body.md"
+          fi
