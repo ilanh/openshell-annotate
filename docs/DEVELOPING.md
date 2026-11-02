@@ -68,6 +68,7 @@ tests (including the golden/fixture tests) against newer OpenShell code, without
 
 ```
 scripts/upstream-compat.sh latest-release   # newest stable vX.Y.Z tag
+scripts/upstream-compat.sh latest-prerelease  # newest vX.Y.Z-pre.N tag if newer than stable, else latest-release
 scripts/upstream-compat.sh main             # OpenShell HEAD
 scripts/upstream-compat.sh v0.1.7-pre.3     # any tag, branch or commit SHA
 ```
@@ -76,7 +77,7 @@ It builds a throwaway copy with the dependency repointed to the resolved commit,
 `cargo test` and the docs check, and prints `upstream-compat: <target> @ <sha>: compatible|BROKEN` (exit 1 when broken).
 Set `CARGO_TARGET_DIR` to reuse a build cache.
 
-`.github/workflows/upstream-compat.yml` runs both targets weekly (Mondays 05:00 UTC), on manual dispatch, and on pull
+`.github/workflows/upstream-compat.yml` runs `latest-release`, `latest-prerelease` and `main` weekly (Mondays 05:00 UTC), on manual dispatch, and on pull
 requests that touch `Cargo.toml`, `Cargo.lock` or the workflow itself. It is informational, not a required check: it never
 turns a normal PR red. A failed *scheduled* run opens (or comments on) a single issue labelled `upstream-compat` with the
 target, the upstream commit and a link to the log. The resolved upstream commit is in each run's job summary.

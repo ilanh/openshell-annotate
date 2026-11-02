@@ -3,6 +3,7 @@
 # WITHOUT touching this working tree (Cargo.toml / Cargo.lock stay pinned). Works on a temporary copy.
 #
 #   scripts/upstream-compat.sh latest-release   # newest stable vX.Y.Z tag of NVIDIA/OpenShell
+#   scripts/upstream-compat.sh latest-prerelease # newest vX.Y.Z-pre.N tag, if newer than latest stable (else latest-release)
 #   scripts/upstream-compat.sh main             # OpenShell HEAD
 #   scripts/upstream-compat.sh v0.1.7-pre.3     # any tag, branch or commit SHA
 #
@@ -14,10 +15,25 @@ cd "$(dirname "$0")/.."
 
 REPO="${UPSTREAM_REPO:-https://github.com/NVIDIA/OpenShell}"
 TARGET="${1:-}"
-[ -n "$TARGET" ] || { echo "usage: $0 <latest-release|main|tag|branch|sha>" >&2; exit 2; }
+[ -n "$TARGET" ] || { echo "usage: $0 <latest-release|latest-prerelease|main|tag|branch|sha>" >&2; exit 2; }
 
 # --- resolve the target to a commit SHA ---------------------------------------------------------
 case "$TARGET" in
+  latest-prerelease)
+    # Newest vX.Y.Z-pre.N tag by version order, used only if it is newer than the newest stable tag.
+    TAGS=$(git ls-remote --tags --refs "$REPO" | sed "s#.*refs/tags/##") || true
+    STABLE=$(printf "%s\n" "$TAGS" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -1) || true
+    PRE=$(printf "%s\n" "$TAGS" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+-pre\.[0-9]+$" | sort -V | tail -1) || true
+    # A prerelease vX.Y.Z-pre.N precedes vX.Y.Z, so compare its base version against the stable tag.
+    if [ -n "${PRE:-}" ] && { [ -z "${STABLE:-}" ] || { [ "${PRE%-pre.*}" != "$STABLE" ] && [ "$(printf "%s\n%s\n" "$STABLE" "${PRE%-pre.*}" | sort -V | tail -1)" = "${PRE%-pre.*}" ]; }; }; then
+      LABEL="$PRE"
+    else
+      echo "note: no prerelease newer than ${STABLE:-<none>}; falling back to latest-release" >&2
+      LABEL="$STABLE"
+    fi
+    [ -n "${LABEL:-}" ] || { echo "could not find a release tag in $REPO" >&2; exit 2; }
+    SHA=$(git ls-remote "$REPO" "refs/tags/$LABEL^{}" "refs/tags/$LABEL" | awk "NR==1{print \$1}")
+    ;;
   latest-release)
     # Newest stable release tag (vX.Y.Z, no -pre suffix). ls-remote avoids API rate limits.
     LABEL=$(git ls-remote --tags --refs "$REPO" | sed 's#.*refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1) || true

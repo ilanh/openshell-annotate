@@ -1,9 +1,9 @@
 name: Upstream compatibility
 
-# Builds and tests openshell-annotate against NVIDIA/OpenShell's newest release and its main branch,
+# Builds and tests openshell-annotate against NVIDIA/OpenShell's newest release, newest prerelease and its main branch,
 # so changes to the policy schema show up here before they bite users.
 # Informational only: this is NOT a required check (see .github/rulesets/protect-main.json).
-# Run the same thing locally with: scripts/upstream-compat.sh <latest-release|main>
+# Run the same thing locally with: scripts/upstream-compat.sh <latest-release|latest-prerelease|main>
 
 on:
   schedule:
@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [latest-release, main]
+        target: [latest-release, latest-prerelease, main]
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
