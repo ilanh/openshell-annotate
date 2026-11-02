@@ -489,10 +489,8 @@ fn lint_sites(
                 }
                 push(s.line, Severity::Warning, "env", format!("reads secret-like variable {n} with no `@openshell provider {n}`; if a provider supplies it, declare it; otherwise `@openshell ignore kind=env reason=\"...\"`"));
             }
-            "exec" => {
-                if !covered(s.line, "exec") {
-                    push(s.line, Severity::Info, "exec", format!("{}: the spawned program is the binary that opens its own connections; if it talks to the network add `bin=` on its egress, else `@openshell ignore kind=exec reason=\"...\"`", s.what));
-                }
+            "exec" if !covered(s.line, "exec") => {
+                push(s.line, Severity::Info, "exec", format!("{}: the spawned program is the binary that opens its own connections; if it talks to the network add `bin=` on its egress, else `@openshell ignore kind=exec reason=\"...\"`", s.what));
             }
             "net" => {
                 if covered(s.line, "net") {

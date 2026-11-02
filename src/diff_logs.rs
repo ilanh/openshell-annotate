@@ -658,7 +658,7 @@ pub fn write_suggestions(
         let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
         let lang = scan.sources.iter().find(|s| s.rel == file).map(|s| s.lang);
         let lead = lang.map(leader).unwrap_or("#");
-        ins.sort_by(|a, b| b.0.cmp(&a.0));
+        ins.sort_by_key(|b| std::cmp::Reverse(b.0));
         for (line, d) in ins {
             let i = line.saturating_sub(1).min(lines.len());
             let indent: String = lines
