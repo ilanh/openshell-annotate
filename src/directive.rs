@@ -168,8 +168,7 @@ fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
                 return Err("attribute with empty key".into());
             }
             i += 1;
-            let val;
-            if i < chars.len() && chars[i] == '"' {
+            let val: String = if i < chars.len() && chars[i] == '"' {
                 i += 1;
                 let mut v = String::new();
                 let mut closed = false;
@@ -198,7 +197,7 @@ fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
                 if i < chars.len() && !chars[i].is_whitespace() {
                     return Err(format!("unexpected text after quoted value for `{key}`"));
                 }
-                val = v;
+                v
             } else {
                 let vs = i;
                 while i < chars.len() && !chars[i].is_whitespace() {
@@ -209,8 +208,8 @@ fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
                     }
                     i += 1;
                 }
-                val = chars[vs..i].iter().collect();
-            }
+                chars[vs..i].iter().collect()
+            };
             out.push(Tok::Pair(key, val));
         } else if i < chars.len() && chars[i] == '"' {
             return Err("unexpected quote (values must be written key=\"value\")".into());
