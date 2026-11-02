@@ -146,17 +146,26 @@ It is not needed to contribute; `cargo test` covers the generator.
 
 ## 8. Branch workflow
 
+`main` is protected: no direct commits or pushes, only branches and pull requests (full rules in `CONTRIBUTING.md`).
+
 ```
 git switch main && git pull --ff-only
 git switch -c feat/short-name                  # or fix/..., docs/..., chore/...
-# edit, add a test, run: TOOLCHAIN=1.94 scripts/ci-local.sh
-git commit -s -m "feat: what and why"          # -s adds the DCO Signed-off-by line (required, see CONTRIBUTING.md)
-git push -u origin feat/short-name             # CI runs on every push to a PR and on main
+# edit, add a test, then run: TOOLCHAIN=1.94 scripts/ci-local.sh
+git commit -s -m "feat: what and why"          # -s adds the DCO Signed-off-by line (required)
+git push -u origin feat/short-name             # CI runs on every push to a pull request
+gh pr create --fill                            # open the PR into main
+gh pr checks --watch                           # wait for `check` and `audit` to pass
+gh pr merge --squash                           # squash merge; the branch is deleted automatically
 ```
 
-Open a pull request into `main` once CI is green. Missing sign-off: `git commit --amend -s` (last commit) or
-`git rebase --signoff main`. Keep commits small and use conventional prefixes (`feat:`, `fix:`, `docs:`, `chore:`, `test:`).
-Make sure `git config user.name` and `user.email` are the identity you want public; GitHub's noreply address works.
+CI must pass and the branch must be up to date with `main` (`git rebase origin/main` or the "Update branch" button).
+Missing sign-off: `git commit --amend -s` (last commit) or `git rebase --signoff main`. Use conventional prefixes
+(`feat:`, `fix:`, `docs:`, `chore:`, `test:`), and make sure `git config user.name` and `user.email` are the identity you
+want public; GitHub's noreply address works.
+
+The protection ruleset lives in `.github/rulesets/protect-main.json`; apply it with `scripts/protect-main.sh` (needs a
+public repo or a paid plan).
 
 ## 9. Troubleshooting
 
