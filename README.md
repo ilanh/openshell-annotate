@@ -126,6 +126,8 @@ cargo test
 scripts/gen-docs.sh --check                  # docs/CLI.md and docs/DIRECTIVES.md are generated from the code
 ```
 
+Full guide (prerequisites, a hands-on quick start, Docker, the sandbox flow, branch workflow): [docs/DEVELOPING.md](docs/DEVELOPING.md).
+
 Contributions need a DCO sign-off, see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
 
 ## Docker (local build)
