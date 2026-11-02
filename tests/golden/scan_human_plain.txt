@@ -1,0 +1,58 @@
+cmd/main.go  (2 directives)
+
+egress api.github.com:443  # release lookup
+ --> cmd/main.go:3
+  |
+3 | // @openshell egress api.github.com:443 reason="release lookup" access=read-only
+  |
+
+egress api.github.com:443  # release lookup (second call site)
+ --> cmd/main.go:4
+  |
+4 | // @openshell egress api.github.com:443 reason="release lookup (second call site)" access=read-only
+  |
+
+scripts/run.sh  (2 directives)
+
+egress registry.npmjs.org:443  # npm install
+ --> scripts/run.sh:2
+  |
+2 | # @openshell egress registry.npmjs.org:443 reason="npm install" bin=/usr/local/bin/node access=read-only
+  |
+
+fs read /etc/ssl/certs  # CA bundle
+ --> scripts/run.sh:3
+  |
+3 | # @openshell fs read /etc/ssl/certs reason="CA bundle"
+  |
+
+src/cache.py  (2 directives)
+
+fs write /workspace/data  # result cache
+ --> src/cache.py:2
+  |
+2 | # @openshell fs write /workspace/data reason="result cache"
+  |
+
+egress huggingface.co:443  # model download
+ --> src/cache.py:3
+  |
+3 | # @openshell egress huggingface.co:443 reason="model download" allow="GET:/**"
+  |
+
+src/llm.ts  (2 directives)
+
+egress api.openai.com:443  # LLM calls
+ --> src/llm.ts:1
+  |
+1 | // @openshell egress api.openai.com:443 reason="LLM calls" access=read-write
+  |
+
+provider OPENAI_API_KEY
+ --> src/llm.ts:2
+  |
+2 | // @openshell provider OPENAI_API_KEY
+  |
+
+8 directives in 4 files
+by category: env 1, fs 2, net 5

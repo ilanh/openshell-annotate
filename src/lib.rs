@@ -9,6 +9,7 @@ pub mod generate;
 pub mod lexer;
 pub mod lint;
 pub mod providers;
+pub mod render;
 pub mod report;
 pub mod scan;
 pub mod spec;

@@ -1,0 +1,58 @@
+[1m📄 cmd/main.go[0m[2m  (2 directives)[0m
+
+[1;36m🌐 egress[0m [1mapi.github.com:443[0m[2m  # release lookup[0m
+ [1;34m-->[0m cmd/main.go:3
+  [1;34m|[0m
+[1;34m3[0m [1;34m|[0m // @openshell egress api.github.com:443 reason="release lookup" access=read-only
+  [1;34m|[0m
+
+[1;36m🌐 egress[0m [1mapi.github.com:443[0m[2m  # release lookup (second call site)[0m
+ [1;34m-->[0m cmd/main.go:4
+  [1;34m|[0m
+[1;34m4[0m [1;34m|[0m // @openshell egress api.github.com:443 reason="release lookup (second call site)" access=read-only
+  [1;34m|[0m
+
+[1m📄 scripts/run.sh[0m[2m  (2 directives)[0m
+
+[1;36m🌐 egress[0m [1mregistry.npmjs.org:443[0m[2m  # npm install[0m
+ [1;34m-->[0m scripts/run.sh:2
+  [1;34m|[0m
+[1;34m2[0m [1;34m|[0m # @openshell egress registry.npmjs.org:443 reason="npm install" bin=/usr/local/bin/node access=read-only
+  [1;34m|[0m
+
+[1;35m📁 fs read[0m [1m/etc/ssl/certs[0m[2m  # CA bundle[0m
+ [1;34m-->[0m scripts/run.sh:3
+  [1;34m|[0m
+[1;34m3[0m [1;34m|[0m # @openshell fs read /etc/ssl/certs reason="CA bundle"
+  [1;34m|[0m
+
+[1m📄 src/cache.py[0m[2m  (2 directives)[0m
+
+[1;35m📁 fs write[0m [1m/workspace/data[0m[2m  # result cache[0m
+ [1;34m-->[0m src/cache.py:2
+  [1;34m|[0m
+[1;34m2[0m [1;34m|[0m # @openshell fs write /workspace/data reason="result cache"
+  [1;34m|[0m
+
+[1;36m🌐 egress[0m [1mhuggingface.co:443[0m[2m  # model download[0m
+ [1;34m-->[0m src/cache.py:3
+  [1;34m|[0m
+[1;34m3[0m [1;34m|[0m # @openshell egress huggingface.co:443 reason="model download" allow="GET:/**"
+  [1;34m|[0m
+
+[1m📄 src/llm.ts[0m[2m  (2 directives)[0m
+
+[1;36m🌐 egress[0m [1mapi.openai.com:443[0m[2m  # LLM calls[0m
+ [1;34m-->[0m src/llm.ts:1
+  [1;34m|[0m
+[1;34m1[0m [1;34m|[0m // @openshell egress api.openai.com:443 reason="LLM calls" access=read-write
+  [1;34m|[0m
+
+[1;33m🔑 provider[0m [1mOPENAI_API_KEY[0m
+ [1;34m-->[0m src/llm.ts:2
+  [1;34m|[0m
+[1;34m2[0m [1;34m|[0m // @openshell provider OPENAI_API_KEY
+  [1;34m|[0m
+
+[1;32m✔ 8 directives in 4 files[0m
+by category: 🔑 env 1 · 📁 fs 2 · 🌐 net 5

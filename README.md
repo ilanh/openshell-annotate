@@ -34,10 +34,10 @@ const r = await fetch("https://api.openai.com/v1/chat/completions", { ... });
 
 | Command | What it does |
 |---|---|
-| `scan [PATHS] [--json]` | list directives with `file:line` (JS/TS, Python, Go, shell, Dockerfile comments; string-aware lexer) |
-| `generate [PATHS] -o policy.yaml [--providers-out f.json\|f.sh] [--profiles-dir DIR]` | emit policy.yaml with a comment per entry; re-validated with the OpenShell schema crate; providers as JSON or a setup script |
+| `scan [PATHS] [--format human\|json\|compact] [--color ...] [--no-icons]` | list directives with `file:line` (JS/TS, Python, Go, shell, Dockerfile comments; string-aware lexer) |
+| `generate [PATHS] -o policy.yaml [--providers-out f.json\|f.sh] [--profiles-dir DIR] [--format ...]` | emit policy.yaml with a comment per entry; re-validated with the OpenShell schema crate; providers as JSON or a setup script |
 | `lint [PATHS] [--policy policy.yaml] [--deny-warnings] [--format human\|json\|compact] [--color auto\|always\|never] [--no-icons]` | directive validation + tree-sitter detection (JS/TS, Python, Go, bash) of un-annotated network calls, URL literals, filesystem writes, secret reads, subprocesses; sanity-checks a policy file |
-| `diff-logs LOG... [--write] [--deny-stale] [--json]` | map sandbox allow/deny events (`openshell logs` shorthand or OCSF JSONL, `-` = stdin) to directives by binary, host, port: suggests missing directives (`--write` inserts them), flags stale ones, separates non-actionable (SSRF/metadata) and declined (`ignore kind=net host=`) denials; exit 1 when something is missing |
+| `diff-logs LOG... [--write] [--deny-stale] [--format human\|json\|compact] [--color ...] [--no-icons]` | map sandbox allow/deny events (`openshell logs` shorthand or OCSF JSONL, `-` = stdin) to directives by binary, host, port: suggests missing directives (`--write` inserts them), flags stale ones, separates non-actionable (SSRF/metadata) and declined (`ignore kind=net host=`) denials; exit 1 when something is missing |
 | `drift [PATHS] --policy policy.yaml [--providers f.json] [--strict]` | regenerate in memory and compare as typed documents; reports missing / extra / changed, tagged `startup` or `live` |
 
 Exit codes: 0 clean, 1 findings/errors, 2 usage or I/O error.
@@ -77,6 +77,87 @@ it, and `NO_COLOR` / `CLICOLOR_FORCE` are honoured in `auto` mode. Icons fall ba
 For scripts, CI and AI agents use a stable format: `--format compact` prints one `file:line: severity[category]: message` line per
 finding, and `--format json` (alias `--json`) prints the JSON array. Both keep the old `lint: N directive(s); ...` summary on
 stderr. Exit codes and `--deny-warnings` do not depend on the format.
+
+### Readable output for `scan`, `generate` and `diff-logs`
+
+The other commands share the lint report's look and flags (`--format human|json|compact`, `--color auto|always|never`,
+`--no-icons`/`--ascii`; `NO_COLOR` and `CLICOLOR_FORCE` are honoured). `human` is the default; `--format compact` prints
+the plain output of earlier versions (one line per item) and `--json` stays an alias for `--format json`. Exit codes do not
+depend on the format. Category icons: 🌐 net, 📁 fs, 🔑 env, ⚙️ exec, 📝 directive, 📜 policy, 🧹 stale/drift.
+
+`scan` groups directives by file, shows each one's `file:line` and its source line, and ends with counts by category:
+
+```text
+📄 cmd/main.go  (2 directives)
+
+🌐 egress api.github.com:443  # release lookup
+ --> cmd/main.go:3
+  |
+3 | // @openshell egress api.github.com:443 reason="release lookup" access=read-only
+  |
+
+🌐 egress api.github.com:443  # release lookup (second call site)
+ --> cmd/main.go:4
+  |
+4 | // @openshell egress api.github.com:443 reason="release lookup (second call site)" access=read-only
+...
+✔ 8 directives in 4 files
+by category: 🔑 env 1 · 📁 fs 2 · 🌐 net 5
+```
+
+`diff-logs` groups what the logs say by what to do about it: missing directives, binaries not covered, L7 rules too narrow,
+things to review by hand, stale directives, deliberate declines and always-blocked destinations. Each fix is previewed as an
+inserted `+` line above the line `--write` would put it on; the footer counts suggestions and names the follow-up command.
+
+```text
+🔍 diff-logs  7 events: ✖ 6 denied · ✔ 1 allowed
+
+➕ Missing directives  (1)
+
+✖ 🌐 missing egress: api.newvendor.io:443  ×1  /usr/bin/python3.12
+  = why: no directive covers this host:port
+  = where: no source line mentions this host; `--write` appends it to openshell/observed-egress.sh
+  = add: @openshell egress api.newvendor.io:443 reason="observed in sandbox log: /usr/bin/python3.12 (confirm it is needed)" bin=/usr/bin/python3.12
+
+⚙️ Binary not covered  (1)
+
+⚠ 🌐 binary mismatch: registry.npmjs.org:443  ×2  /usr/bin/curl
+ --> scripts/run.sh:2
+  |
+1 | #!/usr/bin/env bash
++ | # @openshell egress registry.npmjs.org:443 reason="observed in sandbox log: /usr/bin/curl (confirm it is needed)" bin=/usr/bin/curl access=read-only
+2 | # @openshell egress registry.npmjs.org:443 reason="npm install" bin=/usr/local/bin/node access=read-only
+  |
+  = why: host:port is annotated at scripts/run.sh:2 but for /usr/local/bin/node; this binary is not in
+         the rule
+
+🔒 L7 rules too narrow  (1)
+
+⚠ 🌐 l7 allow: huggingface.co:443  ×1
+...
+```
+
+`generate` never changes what it writes: the policy YAML is the only thing on stdout (or in `-o FILE`) for every format, so
+`openshell-annotate generate > policy.yaml` and pipes work as before. The readable summary (rules with their source lines,
+filesystem roots, providers, warnings) goes to **stderr**, and its colour follows stderr. With `--format json` the summary is
+a JSON object on stderr; `--format compact` prints the previous `warning: ...` and `generated: ...` lines.
+
+```text
+✔ generated a policy from 8 directives
+
+📜 policy     → stdout
+🌐 network    4 rules · 4 endpoints · 4 binary paths
+   • api_github_com
+       → api.github.com:443 [protocol=rest access=read-only enforcement=enforce]
+       bins: /opt/app/server
+       from cmd/main.go:3, cmd/main.go:4
+   • api_openai_com
+       → api.openai.com:443 [protocol=rest access=read-write enforcement=enforce]
+       bins: /usr/local/bin/node
+       from src/llm.ts:1
+...
+```
+
 `--root DIR` sets the repository root (paths in output are relative to it), `--config FILE` overrides
 `<root>/openshell-annotate.toml`.
 

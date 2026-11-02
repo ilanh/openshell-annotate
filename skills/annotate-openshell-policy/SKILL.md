@@ -111,7 +111,7 @@ git clone https://github.com/o/r.git /workspace/r
 ## 3. Check your work (run all, in order, fix until clean)
 
 ```
-openshell-annotate scan                                   # every directive with file:line; parse errors fail here
+openshell-annotate scan --format compact                  # every directive with file:line; parse errors fail here (`human` is the default and longer; parse compact or --json)
 openshell-annotate generate -o openshell/policy.yaml --providers-out openshell/providers.sh
 openshell-annotate lint --format compact --policy openshell/policy.yaml    # directive errors + remaining unannotated calls + policy sanity
 openshell-annotate drift --policy openshell/policy.yaml   # must say "no drift" after generate
@@ -123,7 +123,7 @@ Optional deeper checks when the OpenShell CLI is available:
 openshell-prover check --boundary openshell/policy.yaml openshell/policy.yaml   # parses + checks the file offline (workaround until `openshell policy lint`)
 openshell sandbox create --policy openshell/policy.yaml ...                      # the gateway performs full validation
 openshell logs <sandbox> --source sandbox -n 5000 > logs.txt                     # wait ~5 s after the workload: delivery is batched
-openshell-annotate diff-logs logs.txt                                            # denials -> missing directives (+ stale ones); --write applies them
+openshell-annotate diff-logs logs.txt --format compact                           # denials -> missing directives (+ stale ones); --write applies them
 ```
 
 Fix-up table:

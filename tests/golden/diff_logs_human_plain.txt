@@ -1,0 +1,62 @@
+diff-logs  7 events: 6 denied, 1 allowed
+
+Missing directives  (1)
+
+missing egress: api.newvendor.io:443  x1  /usr/bin/python3.12
+  = why: no directive covers this host:port
+  = where: no source line mentions this host; `--write` appends it to openshell/observed-egress.sh
+  = add: @openshell egress api.newvendor.io:443 reason="observed in sandbox log: /usr/bin/python3.12 (confirm it is needed)" bin=/usr/bin/python3.12
+
+Binary not covered  (1)
+
+binary mismatch: registry.npmjs.org:443  x2  /usr/bin/curl
+ --> scripts/run.sh:2
+  |
+1 | #!/usr/bin/env bash
++ | # @openshell egress registry.npmjs.org:443 reason="observed in sandbox log: /usr/bin/curl (confirm it is needed)" bin=/usr/bin/curl access=read-only
+2 | # @openshell egress registry.npmjs.org:443 reason="npm install" bin=/usr/local/bin/node access=read-only
+  |
+  = why: host:port is annotated at scripts/run.sh:2 but for /usr/local/bin/node; this binary is not in
+         the rule
+
+L7 rules too narrow  (1)
+
+l7 allow: huggingface.co:443  x1
+ --> src/cache.py:3
+  |
+2 | # @openshell fs write /workspace/data reason="result cache"
++ | # @openshell egress huggingface.co:443 reason="observed L7 deny: POST /api/upload (confirm it is needed)" allow="POST:/api/upload" bin=/usr/bin/python3.12
+3 | # @openshell egress huggingface.co:443 reason="model download" allow="GET:/**"
+  |
+  = why: method/path not permitted by the rules at src/cache.py:3
+
+Needs a manual look  (1)
+
+manual review: api.github.com:443  x1
+ --> cmd/main.go:3
+  |
+2 |
+3 | // @openshell egress api.github.com:443 reason="release lookup" access=read-only
+4 | // @openshell egress api.github.com:443 reason="release lookup (second call site)" access=read-only
+  |
+  = why: POST /repos/a/b/issues denied under access=read-only; raise access or switch cmd/main.go:3 to
+         allow="..." rules
+
+Stale directives  (1)
+
+stale: api.openai.com:443  /usr/local/bin/node
+ --> src/llm.ts:1
+  |
+1 | // @openshell egress api.openai.com:443 reason="LLM calls" access=read-write
+  |
+  = note: never matched in these logs (advisory: logs are lossy, remove only after a run that exercised
+          this feature)
+
+Not actionable  (1)
+
+blocked: 169.254.169.254:80  x1
+  = why: always-blocked destination (SSRF protection)
+
+4 suggestions  (1 stale directive, 1 not actionable)
+next: `openshell-annotate diff-logs denied.log --write` inserts 3 directives (review, then regenerate the policy)
+note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.6 (#4270).

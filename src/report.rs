@@ -46,7 +46,7 @@ fn severity_word(s: Severity) -> &'static str {
     }
 }
 
-fn severity_sgr(s: Severity) -> &'static str {
+pub(crate) fn severity_sgr(s: Severity) -> &'static str {
     match s {
         Severity::Error => "1;31",
         Severity::Warning => "1;33",
@@ -99,14 +99,14 @@ pub fn resolve_icons(env: &dyn Fn(&str) -> Option<String>) -> bool {
 }
 
 impl Style {
-    fn paint(&self, sgr: &str, text: &str) -> String {
+    pub fn paint(&self, sgr: &str, text: &str) -> String {
         if self.color && !text.is_empty() {
             format!("\x1b[{sgr}m{text}\x1b[0m")
         } else {
             text.to_string()
         }
     }
-    fn gutter(&self, text: &str) -> String {
+    pub fn gutter(&self, text: &str) -> String {
         self.paint("1;34", text)
     }
 }
@@ -119,7 +119,7 @@ const MAX_WIDTH: usize = 110;
 /// Longest underline; a call that spans many columns (or lines) is marked at its start.
 const MAX_UNDERLINE: usize = 48;
 
-fn expand_tabs(s: &str) -> String {
+pub(crate) fn expand_tabs(s: &str) -> String {
     s.trim_end().replace('\t', TAB)
 }
 
@@ -168,7 +168,7 @@ fn underline_range(f: &Finding, raw: &str) -> (usize, usize) {
     (lead, t.len().max(lead + 1))
 }
 
-fn window(text: &str, off: usize, ellipsis: &str) -> String {
+pub(crate) fn window(text: &str, off: usize, ellipsis: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     if off > 0 && chars.len() <= off {
         return String::new();
@@ -186,7 +186,7 @@ fn window(text: &str, off: usize, ellipsis: &str) -> String {
     s
 }
 
-fn digits(n: usize) -> usize {
+pub(crate) fn digits(n: usize) -> usize {
     n.max(1).to_string().len()
 }
 
@@ -348,7 +348,7 @@ fn render_one(
     }
 }
 
-fn plural(n: usize, one: &str, many: &str) -> String {
+pub(crate) fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 

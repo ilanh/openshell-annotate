@@ -23,3 +23,6 @@ subprocesses; add directives with reasons; run `scan`, `generate`, `lint`, `drif
   policy, summaries); the regex engine is kept behind `[lint] engine = "regex"`. New patterns need a case in
   `tests/cli.rs` and in a fixtures repo for sandbox-backed checks.
 - `diff-logs` (`src/diff_logs.rs`) parses shorthand and OCSF JSON; keep both formats in `tests/fixtures/logs`.
+- Human output: `src/report.rs` renders lint; `src/render.rs` renders `scan`, `diff-logs` and the `generate` summary in the same
+  style (shared `Style`, icons, `--format/--color/--no-icons`). `--format compact` and `--format json` must stay byte-stable
+  and `generate` must never put anything but the policy on stdout. Snapshots live in `tests/golden` (`UPDATE_GOLDEN=1 cargo test`).

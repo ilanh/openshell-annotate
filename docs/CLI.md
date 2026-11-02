@@ -47,16 +47,43 @@ Arguments:
 
 Options:
       --json
+          Alias for `--format json`
 
+      --format <FORMAT>
+          Output format
+
+          Possible values:
+          - human:   Multi-line report with source context, icons and colour (the default)
+          - json:    Machine-readable JSON (stable). For `generate` the policy stays on stdout and the JSON summary goes to stderr
+          - compact: One line per item, the plain output of earlier versions (stable; for scripts and CI logs)
+
+          [default: human]
+
+      --color <COLOR>
+          Colour for the human format
+
+          Possible values:
+          - auto:   Colour when the output stream is a terminal (stdout; stderr for the `generate` summary); honours NO_COLOR, CLICOLOR_FORCE and TERM=dumb
+          - always
+          - never
+
+          [default: auto]
+
+      --no-icons
+          Plain ASCII in the human format (no emoji or Unicode icons). Icons also turn off by themselves when the locale is not UTF-8 or TERM=dumb
+
+          [alias: --ascii]
 
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `openshell-annotate generate`
 
 ```text
-Generate policy.yaml (and a providers file) from directives
+Generate policy.yaml (and a providers file) from directives.
+
+The policy YAML is the only thing on stdout (or in --output) whatever the format, so piping is safe. The summary (rules, files, sources, warnings) goes to stderr and follows --format, --color and --no-icons.
 
 Usage: openshell-annotate generate [OPTIONS] [PATHS]...
 
@@ -74,8 +101,33 @@ Options:
       --profiles-dir <PROFILES_DIR>
           Provider-profile directory (overrides [providers].profiles_dir)
 
+      --format <FORMAT>
+          Output format
+
+          Possible values:
+          - human:   Multi-line report with source context, icons and colour (the default)
+          - json:    Machine-readable JSON (stable). For `generate` the policy stays on stdout and the JSON summary goes to stderr
+          - compact: One line per item, the plain output of earlier versions (stable; for scripts and CI logs)
+
+          [default: human]
+
+      --color <COLOR>
+          Colour for the human format
+
+          Possible values:
+          - auto:   Colour when the output stream is a terminal (stdout; stderr for the `generate` summary); honours NO_COLOR, CLICOLOR_FORCE and TERM=dumb
+          - always
+          - never
+
+          [default: auto]
+
+      --no-icons
+          Plain ASCII in the human format (no emoji or Unicode icons). Icons also turn off by themselves when the locale is not UTF-8 or TERM=dumb
+
+          [alias: --ascii]
+
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `openshell-annotate lint`
@@ -96,24 +148,24 @@ Options:
       --deny-warnings
           Exit 1 on warnings too
 
+      --json
+          Alias for `--format json`
+
       --format <FORMAT>
           Output format
 
           Possible values:
-          - human:   Multi-line report with source context, underlines, icons and suggested fixes
-          - json:    JSON array of findings (stable)
-          - compact: One line per finding: `file:line: severity[category]: message` (stable; for scripts and CI logs)
+          - human:   Multi-line report with source context, icons and colour (the default)
+          - json:    Machine-readable JSON (stable). For `generate` the policy stays on stdout and the JSON summary goes to stderr
+          - compact: One line per item, the plain output of earlier versions (stable; for scripts and CI logs)
 
           [default: human]
-
-      --json
-          Alias for `--format json`
 
       --color <COLOR>
           Colour for the human format
 
           Possible values:
-          - auto:   Colour when stdout is a terminal; honours NO_COLOR, CLICOLOR_FORCE and TERM=dumb
+          - auto:   Colour when the output stream is a terminal (stdout; stderr for the `generate` summary); honours NO_COLOR, CLICOLOR_FORCE and TERM=dumb
           - always
           - never
 
@@ -152,10 +204,35 @@ Options:
           Also exit 1 when stale directives are found
 
       --json
+          Alias for `--format json`
 
+      --format <FORMAT>
+          Output format
+
+          Possible values:
+          - human:   Multi-line report with source context, icons and colour (the default)
+          - json:    Machine-readable JSON (stable). For `generate` the policy stays on stdout and the JSON summary goes to stderr
+          - compact: One line per item, the plain output of earlier versions (stable; for scripts and CI logs)
+
+          [default: human]
+
+      --color <COLOR>
+          Colour for the human format
+
+          Possible values:
+          - auto:   Colour when the output stream is a terminal (stdout; stderr for the `generate` summary); honours NO_COLOR, CLICOLOR_FORCE and TERM=dumb
+          - always
+          - never
+
+          [default: auto]
+
+      --no-icons
+          Plain ASCII in the human format (no emoji or Unicode icons). Icons also turn off by themselves when the locale is not UTF-8 or TERM=dumb
+
+          [alias: --ascii]
 
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `openshell-annotate docs`

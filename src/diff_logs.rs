@@ -602,7 +602,7 @@ pub fn analyze(events: &[Event], scan: &Scan, cfg: &Config) -> Report {
     rep
 }
 
-fn leader(lang: Language) -> &'static str {
+pub fn leader(lang: Language) -> &'static str {
     match lang {
         Language::Python | Language::Shell => "#",
         _ => "//",

@@ -46,7 +46,7 @@ fn err(o: &Output) -> String {
 #[test]
 fn scan_lists_directives_with_locations_and_ignores_strings() {
     let t = fixture();
-    let o = run(t.path(), &["scan"]);
+    let o = run(t.path(), &["scan", "--format", "compact"]);
     assert!(o.status.success(), "{}", err(&o));
     let s = out(&o);
     assert!(s.contains("src/llm.ts:1  egress api.openai.com:443"), "{s}");
@@ -672,10 +672,20 @@ fn diff_logs_clean_when_everything_is_covered() {
     let t = fixture();
     let log = t.path().join("ok.log");
     std::fs::write(&log, "[t] [sandbox] [OCSF ] [ocsf] NET:OPEN [INFO] ALLOWED /usr/local/bin/node(1) -> registry.npmjs.org:443 [policy:r engine:opa]\n").unwrap();
-    let o = run(t.path(), &["diff-logs", log.to_str().unwrap()]);
+    let o = run(
+        t.path(),
+        &["diff-logs", log.to_str().unwrap(), "--format", "compact"],
+    );
     assert!(o.status.success(), "{}{}", out(&o), err(&o));
     // not-seen directives are reported as stale, and --deny-stale turns that into a failure
     assert!(out(&o).contains("STALE"));
+    let o = run(t.path(), &["diff-logs", log.to_str().unwrap()]);
+    assert!(o.status.success(), "{}{}", out(&o), err(&o));
+    assert!(
+        out(&o).contains("every event is explained") && out(&o).contains("Stale directives"),
+        "{}",
+        out(&o)
+    );
     let o = run(
         t.path(),
         &["diff-logs", log.to_str().unwrap(), "--deny-stale"],
@@ -996,7 +1006,7 @@ fn js_directives_survive_regex_literals_that_confuse_a_lexer() {
         "const re = /[\"'`]\\//g;\nexport function f(a: number, b: number) { return a / b / 2; }\n// @openshell egress ws.rx-test.example:443 reason=\"after a regex literal\"\nexport const x = 1;\n",
     )
     .unwrap();
-    let o = run(t.path(), &["scan"]);
+    let o = run(t.path(), &["scan", "--format", "compact"]);
     assert!(
         out(&o).contains("src/rx.ts:3  egress"),
         "{}{}",
@@ -1304,4 +1314,328 @@ fn lint_human_puts_a_long_usage_message_under_help() {
         s.contains("= help: expected syntax: egress <host>:<port>"),
         "{s}"
     );
+}
+
+// ---- human scan / diff-logs / generate -------------------------------------------------------------------------------
+
+const UTF8: [(&str, &str); 2] = [("LANG", "en_US.UTF-8"), ("TERM", "xterm-256color")];
+
+/// The sample project plus a copy of the shorthand log (relative path, so the snapshot is machine independent).
+fn diff_fixture() -> tempfile::TempDir {
+    let t = fixture();
+    std::fs::copy(logs_fixture("shorthand.log"), t.path().join("denied.log")).unwrap();
+    t
+}
+
+#[test]
+fn scan_human_plain_and_colour_snapshots() {
+    let t = fixture();
+    let o = run_env(t.path(), &["scan", "--color", "never", "--no-icons"], &[]);
+    assert!(o.status.success(), "{}", err(&o));
+    let s = out(&o);
+    assert!(
+        !s.contains('\x1b') && s.is_ascii(),
+        "plain output must be ASCII: {s}"
+    );
+    golden("scan_human_plain.txt", &s);
+    assert_eq!(err(&o), "", "the human report carries its own summary");
+    let o = run_env(t.path(), &["scan", "--color", "always"], &UTF8);
+    let s = out(&o);
+    assert!(s.contains('\x1b'), "{s}");
+    golden("scan_human_color.txt", &s);
+    // icons without colour: one per category, grouped under the file, with the summary by category
+    let o = run_env(t.path(), &["scan", "--color", "never"], &UTF8);
+    let s = out(&o);
+    for want in [
+        "\u{1f4c4} cmd/main.go  (2 directives)",
+        "\u{1f310} egress api.github.com:443",
+        "\u{1f4c1} fs write /workspace/data",
+        "\u{1f511} provider OPENAI_API_KEY",
+        "--> src/llm.ts:2",
+        "8 directives in 4 files",
+        "by category: \u{1f511} env 1",
+    ] {
+        assert!(s.contains(want), "missing `{want}` in {s}");
+    }
+}
+
+#[test]
+fn scan_machine_formats_are_stable() {
+    let t = fixture();
+    let compact = run_env(t.path(), &["scan", "--format", "compact"], &UTF8);
+    let c = out(&compact);
+    assert_eq!(c.lines().count(), 8, "{c}");
+    assert!(c.contains("src/llm.ts:2  provider OPENAI_API_KEY"), "{c}");
+    assert!(err(&compact).contains("8 directive(s) in 4 file(s)"));
+    let a = out(&run(t.path(), &["scan", "--json"]));
+    let b = out(&run(t.path(), &["scan", "--format", "json"]));
+    assert_eq!(a, b);
+    assert!(a.trim_start().starts_with('{'));
+    let o = run(t.path(), &["scan", "--json", "--format", "compact"]);
+    assert_eq!(o.status.code(), Some(2), "--json conflicts with --format");
+}
+
+#[test]
+fn scan_human_reports_nothing_found_and_keeps_parse_errors_on_stderr() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("a.sh"), "echo hi\n").unwrap();
+    let o = run_env(t.path(), &["scan", "--color", "never", "--no-icons"], &[]);
+    assert!(o.status.success());
+    assert!(
+        out(&o).contains("no @openshell directives found (1 file scanned)"),
+        "{}",
+        out(&o)
+    );
+    std::fs::write(t.path().join("b.sh"), "# @openshell frobnicate x\n").unwrap();
+    let o = run_env(t.path(), &["scan", "--color", "never", "--no-icons"], &[]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        out(&o).contains("1 parse error (details on stderr)"),
+        "{}",
+        out(&o)
+    );
+    assert!(err(&o).contains("b.sh:1"), "{}", err(&o));
+}
+
+#[test]
+fn diff_logs_human_plain_and_colour_snapshots() {
+    let t = diff_fixture();
+    let o = run_env(
+        t.path(),
+        &["diff-logs", "denied.log", "--color", "never", "--no-icons"],
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", err(&o));
+    let s = out(&o);
+    assert!(
+        !s.contains('\x1b') && s.is_ascii(),
+        "plain output must be ASCII: {s}"
+    );
+    golden("diff_logs_human_plain.txt", &s);
+    let o = run_env(
+        t.path(),
+        &["diff-logs", "denied.log", "--color", "always"],
+        &UTF8,
+    );
+    assert_eq!(o.status.code(), Some(1));
+    golden("diff_logs_human_color.txt", &out(&o));
+    let o = run_env(
+        t.path(),
+        &["diff-logs", "denied.log", "--color", "never"],
+        &UTF8,
+    );
+    let s = out(&o);
+    for want in [
+        "\u{2716} \u{1f310} missing egress: api.newvendor.io:443",
+        "\u{26a0} \u{1f310} binary mismatch: registry.npmjs.org:443  \u{d7}2  /usr/bin/curl",
+        "\u{26a0} \u{1f9f9} stale: api.openai.com:443",
+        "\u{2139} \u{1f310} manual review: api.github.com:443",
+        "\u{1f50d} diff-logs  7 events",
+    ] {
+        assert!(s.contains(want), "missing `{want}` in {s}");
+    }
+    // the fix is previewed as an inserted line (`+`) above the line it would go on, with the source's own comment leader
+    assert!(
+        s.contains("+ | # @openshell egress registry.npmjs.org:443")
+            && s.contains("--> scripts/run.sh:2"),
+        "{s}"
+    );
+    assert!(s.contains("3 directives"), "{s}");
+}
+
+#[test]
+fn diff_logs_machine_formats_and_exit_codes_do_not_depend_on_the_format() {
+    let t = diff_fixture();
+    let human = run_env(t.path(), &["diff-logs", "denied.log"], &UTF8);
+    let compact = run(
+        t.path(),
+        &["diff-logs", "denied.log", "--format", "compact"],
+    );
+    let json = run(t.path(), &["diff-logs", "denied.log", "--json"]);
+    let json2 = run(t.path(), &["diff-logs", "denied.log", "--format", "json"]);
+    for o in [&human, &compact, &json, &json2] {
+        assert_eq!(o.status.code(), Some(1));
+    }
+    assert_eq!(out(&json), out(&json2));
+    let c = out(&compact);
+    assert!(
+        c.starts_with(
+            "diff-logs: 7 event(s) (6 denied, 1 allowed); 4 suggestion(s), 1 stale directive(s)\n"
+        ),
+        "{c}"
+    );
+    for want in [
+        "MISSING_EGRESS   api.newvendor.io:443 x1 /usr/bin/python3.12\n",
+        "  place:   scripts/run.sh:2\n",
+        "STALE            src/llm.ts:1 api.openai.com:443 (never matched in these logs)\n",
+        "NON-ACTIONABLE   169.254.169.254:80 x1 always-blocked destination (SSRF protection)\n",
+    ] {
+        assert!(c.contains(want), "missing `{want}` in {c}");
+    }
+    let v: serde_json::Value = serde_json::from_str(&out(&json)).unwrap();
+    assert_eq!(v["suggestions"].as_array().unwrap().len(), 4);
+    // --write still applies the same suggestions after a human report
+    let o = run_env(
+        t.path(),
+        &["diff-logs", "denied.log", "--write", "--color", "never"],
+        &UTF8,
+    );
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        err(&o).contains("wrote suggested directives to:"),
+        "{}",
+        err(&o)
+    );
+    let sh = std::fs::read_to_string(t.path().join("scripts/run.sh")).unwrap();
+    assert!(sh.contains("bin=/usr/bin/curl"), "{sh}");
+}
+
+#[test]
+fn generate_policy_is_byte_identical_for_every_format_and_the_summary_goes_to_stderr() {
+    let t = fixture();
+    let want = std::fs::read_to_string(t.path().join("policy.expected.yaml")).unwrap();
+    for fmt in ["human", "compact", "json"] {
+        let o = run_env(
+            t.path(),
+            &["generate", "--format", fmt, "--color", "always"],
+            &UTF8,
+        );
+        assert!(o.status.success(), "{}", err(&o));
+        assert_eq!(
+            out(&o),
+            want,
+            "stdout must be the bare policy with --format {fmt}"
+        );
+        let o = run_env(
+            t.path(),
+            &[
+                "generate", "--format", fmt, "-o", "out.yaml", "--color", "always",
+            ],
+            &UTF8,
+        );
+        assert!(o.status.success(), "{}", err(&o));
+        assert_eq!(out(&o), "", "nothing on stdout when writing a file ({fmt})");
+        assert_eq!(
+            std::fs::read_to_string(t.path().join("out.yaml")).unwrap(),
+            want
+        );
+    }
+    // compact: exactly the earlier stderr
+    let o = run_env(t.path(), &["generate", "--format", "compact"], &UTF8);
+    let e = err(&o);
+    assert!(
+        e.starts_with("warning: egress api.openai.com:443 (rule `api_openai_com`) duplicates"),
+        "{e}"
+    );
+    assert!(
+        e.ends_with("generated: 8 directive(s) -> 4 network rule(s), 4 endpoint(s), 4 binary path(s), fs read 1 / write 1, 1 provider(s) (0 unmapped)\n"),
+        "{e}"
+    );
+    assert_eq!(e.lines().count(), 2);
+    // json: summary object on stderr
+    let o = run_env(
+        t.path(),
+        &["generate", "--format", "json", "-o", "p.yaml"],
+        &UTF8,
+    );
+    let v: serde_json::Value = serde_json::from_str(&err(&o)).unwrap();
+    assert_eq!(v["stats"]["network_rules"], 4);
+    assert_eq!(v["policy"], "p.yaml");
+    assert_eq!(v["warnings"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn generate_human_summary_snapshots() {
+    let t = fixture();
+    let args = [
+        "generate",
+        "-o",
+        "policy.yaml",
+        "--providers-out",
+        "providers.sh",
+    ];
+    let mut plain = args.to_vec();
+    plain.extend(["--color", "never", "--no-icons"]);
+    let o = run_env(t.path(), &plain, &[]);
+    assert!(o.status.success(), "{}", err(&o));
+    let e = err(&o);
+    assert!(
+        !e.contains('\x1b') && e.is_ascii(),
+        "plain output must be ASCII: {e}"
+    );
+    golden("generate_human_plain.txt", &e);
+    let mut colour = args.to_vec();
+    colour.extend(["--color", "always"]);
+    let o = run_env(t.path(), &colour, &UTF8);
+    golden("generate_human_color.txt", &err(&o));
+    let o = run_env(t.path(), &["generate", "--color", "never"], &UTF8);
+    let e = err(&o);
+    for want in [
+        "\u{2714} generated a policy from 8 directives",
+        "\u{1f4dc} policy",
+        "\u{1f310} network",
+        "\u{1f4c1} filesystem",
+        "\u{1f511} providers",
+        "\u{26a0} 1 warning",
+        "from cmd/main.go:3, cmd/main.go:4",
+    ] {
+        assert!(e.contains(want), "missing `{want}` in {e}");
+    }
+    assert!(e.contains("\u{2192} stdout"), "{e}");
+}
+
+#[test]
+fn colour_flag_and_environment_apply_to_scan_diff_logs_and_generate() {
+    let t = diff_fixture();
+    let cmds: [(&[&str], bool); 3] = [
+        (&["scan"], false),
+        (&["diff-logs", "denied.log"], false),
+        (&["generate"], true), // summary is on stderr
+    ];
+    for (args, on_stderr) in cmds {
+        let text = |o: &Output| if on_stderr { err(o) } else { out(o) };
+        // not a terminal: plain by default
+        let o = run_env(t.path(), args, &UTF8);
+        assert!(!text(&o).contains('\x1b'), "{args:?}");
+        // CLICOLOR_FORCE forces, NO_COLOR beats it, --color always beats NO_COLOR, --color never beats everything
+        let o = run_env(
+            t.path(),
+            args,
+            &[("LANG", "en_US.UTF-8"), ("CLICOLOR_FORCE", "1")],
+        );
+        assert!(text(&o).contains('\x1b'), "{args:?}");
+        let o = run_env(
+            t.path(),
+            args,
+            &[
+                ("LANG", "en_US.UTF-8"),
+                ("CLICOLOR_FORCE", "1"),
+                ("NO_COLOR", "1"),
+            ],
+        );
+        assert!(!text(&o).contains('\x1b'), "{args:?}");
+        let mut a = args.to_vec();
+        a.extend(["--color", "always"]);
+        let o = run_env(t.path(), &a, &[("NO_COLOR", "1")]);
+        assert!(text(&o).contains('\x1b'), "{args:?}");
+        let mut a = args.to_vec();
+        a.extend(["--color", "never"]);
+        let o = run_env(t.path(), &a, &[("CLICOLOR_FORCE", "1")]);
+        assert!(!text(&o).contains('\x1b'), "{args:?}");
+        // ASCII fallbacks: --no-icons, --ascii, a non-UTF-8 locale and TERM=dumb all drop the emoji
+        for extra in [vec!["--no-icons"], vec!["--ascii"], vec![]] {
+            let mut a = args.to_vec();
+            a.extend(extra.iter().copied());
+            a.extend(["--color", "never"]);
+            let env: &[(&str, &str)] = if a.contains(&"--no-icons") || a.contains(&"--ascii") {
+                &UTF8
+            } else {
+                &[("LANG", "C")]
+            };
+            let o = run_env(t.path(), &a, env);
+            assert!(text(&o).is_ascii(), "{a:?}: {}", text(&o));
+        }
+        let o = run_env(t.path(), args, &[("LANG", "en_US.UTF-8"), ("TERM", "dumb")]);
+        assert!(text(&o).is_ascii(), "{args:?}");
+    }
 }

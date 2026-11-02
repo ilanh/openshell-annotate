@@ -1,0 +1,29 @@
+generated a policy from 8 directives
+
+policy     -> policy.yaml
+network    4 rules, 4 endpoints, 4 binary paths
+   - api_github_com
+       -> api.github.com:443 [protocol=rest access=read-only enforcement=enforce]
+       bins: /opt/app/server
+       from cmd/main.go:3, cmd/main.go:4
+   - api_openai_com
+       -> api.openai.com:443 [protocol=rest access=read-write enforcement=enforce]
+       bins: /usr/local/bin/node
+       from src/llm.ts:1
+   - huggingface_co
+       -> huggingface.co:443 [protocol=rest enforcement=enforce 1 L7 rule]
+       bins: /usr/bin/python3.12
+       from src/cache.py:3
+   - registry_npmjs_org
+       -> registry.npmjs.org:443 [protocol=rest access=read-only enforcement=enforce]
+       bins: /usr/local/bin/node
+       from scripts/run.sh:2
+filesystem 1 read-only, 1 read-write, workdir included
+   - ro  /etc/ssl/certs  from scripts/run.sh:3
+   - rw  /workspace/data  from src/cache.py:2
+providers  1 provider, 0 unmapped -> providers.sh
+   - openai (profile openai): OPENAI_API_KEY  from src/llm.ts:2
+
+1 warning
+   - egress api.openai.com:443 (rule `api_openai_com`) duplicates an endpoint the `openai` provider
+     profile adds when attached; keep it only if you want an explicit rule for the binaries listed

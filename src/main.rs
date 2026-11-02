@@ -6,6 +6,7 @@ use openshell_annotate::drift;
 use openshell_annotate::generate::{self, miette_str};
 use openshell_annotate::lint::{self, Severity};
 use openshell_annotate::providers::{self, Profile};
+use openshell_annotate::render;
 use openshell_annotate::report::{self, ColorMode, Style};
 use openshell_annotate::scan::{self, Scan};
 use openshell_annotate::validate;
@@ -26,24 +27,39 @@ struct Cli {
     cmd: Cmd,
 }
 
-/// Lint output format.
+/// Output format (`scan`, `generate`, `diff-logs`, `lint`).
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum LintFormat {
-    /// Multi-line report with source context, underlines, icons and suggested fixes.
+enum Format {
+    /// Multi-line report with source context, icons and colour (the default).
     Human,
-    /// JSON array of findings (stable).
+    /// Machine-readable JSON (stable). For `generate` the policy stays on stdout and the JSON summary goes to stderr.
     Json,
-    /// One line per finding: `file:line: severity[category]: message` (stable; for scripts and CI logs).
+    /// One line per item, the plain output of earlier versions (stable; for scripts and CI logs).
     Compact,
 }
 
 /// `--color` values.
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum ColorArg {
-    /// Colour when stdout is a terminal; honours NO_COLOR, CLICOLOR_FORCE and TERM=dumb.
+    /// Colour when the output stream is a terminal (stdout; stderr for the `generate` summary); honours NO_COLOR, CLICOLOR_FORCE and TERM=dumb.
     Auto,
     Always,
     Never,
+}
+
+/// Presentation flags shared by `scan`, `generate`, `diff-logs` and `lint`.
+#[derive(clap::Args, Clone, Copy)]
+struct OutputOpts {
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Human)]
+    format: Format,
+    /// Colour for the human format.
+    #[arg(long, value_enum, default_value_t = ColorArg::Auto)]
+    color: ColorArg,
+    /// Plain ASCII in the human format (no emoji or Unicode icons). Icons also turn off by themselves when the locale is
+    /// not UTF-8 or TERM=dumb.
+    #[arg(long, visible_alias = "ascii")]
+    no_icons: bool,
 }
 
 #[derive(Subcommand)]
@@ -52,10 +68,16 @@ enum Cmd {
     Scan {
         /// Files or directories to process (default: the whole root).
         paths: Vec<PathBuf>,
-        #[arg(long)]
+        /// Alias for `--format json`.
+        #[arg(long, conflicts_with = "format")]
         json: bool,
+        #[command(flatten)]
+        out: OutputOpts,
     },
     /// Generate policy.yaml (and a providers file) from directives.
+    ///
+    /// The policy YAML is the only thing on stdout (or in --output) whatever the format, so piping is safe. The summary
+    /// (rules, files, sources, warnings) goes to stderr and follows --format, --color and --no-icons.
     Generate {
         /// Files or directories to process (default: the whole root).
         paths: Vec<PathBuf>,
@@ -68,6 +90,8 @@ enum Cmd {
         /// Provider-profile directory (overrides [providers].profiles_dir).
         #[arg(long)]
         profiles_dir: Option<PathBuf>,
+        #[command(flatten)]
+        out: OutputOpts,
     },
     /// Validate directives, find un-annotated network/fs/secret call sites, optionally check a policy file.
     Lint {
@@ -79,19 +103,11 @@ enum Cmd {
         /// Exit 1 on warnings too.
         #[arg(long)]
         deny_warnings: bool,
-        /// Output format.
-        #[arg(long, value_enum, default_value_t = LintFormat::Human, conflicts_with = "json")]
-        format: LintFormat,
         /// Alias for `--format json`.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "format")]
         json: bool,
-        /// Colour for the human format.
-        #[arg(long, value_enum, default_value_t = ColorArg::Auto)]
-        color: ColorArg,
-        /// Plain ASCII in the human format (no emoji or Unicode icons). Icons also turn off by themselves when the locale is
-        /// not UTF-8 or TERM=dumb.
-        #[arg(long, visible_alias = "ascii")]
-        no_icons: bool,
+        #[command(flatten)]
+        out: OutputOpts,
     },
     /// Map sandbox allow/deny events (OCSF JSON lines or `openshell logs` shorthand) back to directives: suggest missing ones,
     /// flag stale ones. Exit 1 when directives are missing.
@@ -107,8 +123,11 @@ enum Cmd {
         /// Also exit 1 when stale directives are found.
         #[arg(long)]
         deny_stale: bool,
-        #[arg(long)]
+        /// Alias for `--format json`.
+        #[arg(long, conflicts_with = "format")]
         json: bool,
+        #[command(flatten)]
+        out: OutputOpts,
     },
     /// Generate the reference docs (CLI.md, DIRECTIVES.md) from the code; `--check` fails if the committed ones are stale.
     Docs {
@@ -179,6 +198,33 @@ fn do_scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
     scan::scan(root, paths, cfg)
 }
 
+fn style_for(o: &OutputOpts, stream_is_tty: bool) -> Style {
+    let env = |k: &str| std::env::var(k).ok();
+    Style {
+        color: report::resolve_color(
+            match o.color {
+                ColorArg::Auto => ColorMode::Auto,
+                ColorArg::Always => ColorMode::Always,
+                ColorArg::Never => ColorMode::Never,
+            },
+            stream_is_tty,
+            &env,
+        ),
+        icons: !o.no_icons && report::resolve_icons(&env),
+    }
+}
+
+/// Source lines of a file: from the scan when it was scanned, else read from disk (policy files, observed-egress.sh).
+fn lines_of<'a>(root: &'a Path, s: &'a Scan) -> impl Fn(&str) -> Option<Vec<String>> + 'a {
+    move |file: &str| {
+        if let Some(src) = s.sources.iter().find(|x| x.rel == file) {
+            return Some(src.lexed.raw.clone());
+        }
+        let text = std::fs::read_to_string(root.join(file)).ok()?;
+        Some(text.lines().map(str::to_string).collect())
+    }
+}
+
 fn report_parse_errors(s: &Scan) -> bool {
     for e in &s.errors {
         eprintln!("error: {e}");
@@ -205,45 +251,54 @@ fn run(cli: Cli) -> Result<ExitCode> {
         .with_context(|| format!("root {}", cli.root.display()))?;
     let cfg = Config::load_or_default(&root, cli.config.as_deref())?;
     match cli.cmd {
-        Cmd::Scan { paths, json } => {
+        Cmd::Scan { paths, json, out } => {
+            use std::io::IsTerminal;
+            let format = if json { Format::Json } else { out.format };
             let s = do_scan(&root, &paths, &cfg)?;
-            if json {
-                #[derive(serde::Serialize)]
-                struct Out<'a> {
-                    directives: &'a [Directive],
-                    errors: &'a [openshell_annotate::directive::ParseError],
+            match format {
+                Format::Json => {
+                    #[derive(serde::Serialize)]
+                    struct Out<'a> {
+                        directives: &'a [Directive],
+                        errors: &'a [openshell_annotate::directive::ParseError],
+                    }
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&Out {
+                            directives: &s.directives,
+                            errors: &s.errors
+                        })?
+                    );
                 }
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&Out {
-                        directives: &s.directives,
-                        errors: &s.errors
-                    })?
-                );
-            } else {
-                for d in &s.directives {
-                    let detail = match &d.kind {
-                        openshell_annotate::directive::Kind::Egress { host, ports } => format!(
-                            "{host}:{}",
-                            ports
-                                .iter()
-                                .map(u16::to_string)
-                                .collect::<Vec<_>>()
-                                .join(",")
-                        ),
-                        openshell_annotate::directive::Kind::Provider { env } => env.clone(),
-                        openshell_annotate::directive::Kind::Fs { path, .. } => path.clone(),
-                        openshell_annotate::directive::Kind::Bin { path } => path.clone(),
-                        _ => String::new(),
-                    };
-                    let reason = d.reason().map(|r| format!("  # {r}")).unwrap_or_default();
-                    println!("{}:{}  {} {detail}{reason}", d.file, d.line, d.kind.name());
+                Format::Compact => {
+                    for d in &s.directives {
+                        let detail = match &d.kind {
+                            openshell_annotate::directive::Kind::Egress { host, ports } => format!(
+                                "{host}:{}",
+                                ports
+                                    .iter()
+                                    .map(u16::to_string)
+                                    .collect::<Vec<_>>()
+                                    .join(",")
+                            ),
+                            openshell_annotate::directive::Kind::Provider { env } => env.clone(),
+                            openshell_annotate::directive::Kind::Fs { path, .. } => path.clone(),
+                            openshell_annotate::directive::Kind::Bin { path } => path.clone(),
+                            _ => String::new(),
+                        };
+                        let reason = d.reason().map(|r| format!("  # {r}")).unwrap_or_default();
+                        println!("{}:{}  {} {detail}{reason}", d.file, d.line, d.kind.name());
+                    }
+                    eprintln!(
+                        "{} directive(s) in {} file(s)",
+                        s.directives.len(),
+                        s.sources.len()
+                    );
                 }
-                eprintln!(
-                    "{} directive(s) in {} file(s)",
-                    s.directives.len(),
-                    s.sources.len()
-                );
+                Format::Human => {
+                    let style = style_for(&out, std::io::stdout().is_terminal());
+                    print!("{}", render::scan_human(&s, &lines_of(&root, &s), style));
+                }
             }
             let had = report_parse_errors(&s);
             Ok(if had {
@@ -257,7 +312,9 @@ fn run(cli: Cli) -> Result<ExitCode> {
             output,
             providers_out,
             profiles_dir,
+            out,
         } => {
+            use std::io::IsTerminal;
             let s = do_scan(&root, &paths, &cfg)?;
             if report_parse_errors(&s) {
                 return Ok(ExitCode::from(1));
@@ -265,9 +322,12 @@ fn run(cli: Cli) -> Result<ExitCode> {
             let profiles = load_profiles(&cfg, profiles_dir.as_deref(), &root)?;
             match generate::generate(&s.directives, &cfg, &profiles) {
                 Ok(g) => {
-                    for w in &g.warnings {
-                        eprintln!("warning: {w}");
+                    if out.format == Format::Compact {
+                        for w in &g.warnings {
+                            eprintln!("warning: {w}");
+                        }
                     }
+                    // The policy goes to stdout / --output untouched, whatever the format: only stderr is decorated.
                     match &output {
                         Some(p) => {
                             if let Some(parent) = p.parent().filter(|x| !x.as_os_str().is_empty()) {
@@ -294,10 +354,46 @@ fn run(cli: Cli) -> Result<ExitCode> {
                         };
                         std::fs::write(p, body)?;
                     }
-                    eprintln!(
-                        "generated: {} directive(s) -> {} network rule(s), {} endpoint(s), {} binary path(s), fs read {} / write {}, {} provider(s) ({} unmapped)",
-                        g.stats.directives, g.stats.network_rules, g.stats.endpoints, g.stats.binaries, g.stats.fs_read, g.stats.fs_write, g.stats.providers, g.stats.unmapped_providers
-                    );
+                    match out.format {
+                        Format::Compact => eprintln!(
+                            "generated: {} directive(s) -> {} network rule(s), {} endpoint(s), {} binary path(s), fs read {} / write {}, {} provider(s) ({} unmapped)",
+                            g.stats.directives, g.stats.network_rules, g.stats.endpoints, g.stats.binaries, g.stats.fs_read, g.stats.fs_write, g.stats.providers, g.stats.unmapped_providers
+                        ),
+                        Format::Json => {
+                            #[derive(serde::Serialize)]
+                            struct Summary<'a> {
+                                stats: &'a generate::Stats,
+                                warnings: &'a [String],
+                                policy: Option<String>,
+                                providers: Option<String>,
+                            }
+                            eprintln!(
+                                "{}",
+                                serde_json::to_string_pretty(&Summary {
+                                    stats: &g.stats,
+                                    warnings: &g.warnings,
+                                    policy: output.as_ref().map(|p| p.display().to_string()),
+                                    providers: providers_out
+                                        .as_ref()
+                                        .map(|p| p.display().to_string()),
+                                })?
+                            );
+                        }
+                        Format::Human => {
+                            let style = style_for(&out, std::io::stderr().is_terminal());
+                            let dest = |p: &PathBuf| p.display().to_string();
+                            eprint!(
+                                "{}",
+                                render::generate_human(
+                                    &g,
+                                    &s.directives,
+                                    output.as_ref().map(dest).as_deref(),
+                                    providers_out.as_ref().map(dest).as_deref(),
+                                    style
+                                )
+                            );
+                        }
+                    }
                     Ok(ExitCode::SUCCESS)
                 }
                 Err(errs) => {
@@ -312,12 +408,10 @@ fn run(cli: Cli) -> Result<ExitCode> {
             paths,
             policy,
             deny_warnings,
-            format,
             json,
-            color,
-            no_icons,
+            out,
         } => {
-            let format = if json { LintFormat::Json } else { format };
+            let format = if json { Format::Json } else { out.format };
             let s = do_scan(&root, &paths, &cfg)?;
             let mut findings = lint::lint(&s, &cfg);
             if let Some(p) = &policy {
@@ -367,8 +461,8 @@ fn run(cli: Cli) -> Result<ExitCode> {
                     .count(),
             );
             match format {
-                LintFormat::Json => println!("{}", serde_json::to_string_pretty(&findings)?),
-                LintFormat::Compact => {
+                Format::Json => println!("{}", serde_json::to_string_pretty(&findings)?),
+                Format::Compact => {
                     for f in &findings {
                         let sev = format!("{:?}", f.severity).to_lowercase();
                         println!(
@@ -377,35 +471,17 @@ fn run(cli: Cli) -> Result<ExitCode> {
                         );
                     }
                 }
-                LintFormat::Human => {
+                Format::Human => {
                     use std::io::IsTerminal;
-                    let env = |k: &str| std::env::var(k).ok();
-                    let style = Style {
-                        color: report::resolve_color(
-                            match color {
-                                ColorArg::Auto => ColorMode::Auto,
-                                ColorArg::Always => ColorMode::Always,
-                                ColorArg::Never => ColorMode::Never,
-                            },
-                            std::io::stdout().is_terminal(),
-                            &env,
-                        ),
-                        icons: !no_icons && report::resolve_icons(&env),
-                    };
-                    let lines_of = |file: &str| -> Option<Vec<String>> {
-                        if let Some(src) = s.sources.iter().find(|x| x.rel == file) {
-                            return Some(src.lexed.raw.clone());
-                        }
-                        let text = std::fs::read_to_string(root.join(file)).ok()?;
-                        Some(text.lines().map(str::to_string).collect())
-                    };
+                    let style = style_for(&out, std::io::stdout().is_terminal());
+                    let lines_of = lines_of(&root, &s);
                     print!(
                         "{}",
                         report::render(&findings, &lines_of, style, s.directives.len())
                     );
                 }
             }
-            if format != LintFormat::Human {
+            if format != Format::Human {
                 eprintln!(
                     "lint: {} directive(s); {ne} error(s), {nw} warning(s), {ni} info",
                     s.directives.len()
@@ -423,8 +499,10 @@ fn run(cli: Cli) -> Result<ExitCode> {
             observed_file,
             deny_stale,
             json,
+            out,
         } => {
             use openshell_annotate::diff_logs as dl;
+            use std::io::IsTerminal;
             use std::io::Read;
             if logs.is_empty() {
                 anyhow::bail!("give at least one log file (or `-` for stdin)");
@@ -447,10 +525,28 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 return Ok(ExitCode::from(1));
             }
             let rep = dl::analyze(&events, &s, &cfg);
-            if json {
-                println!("{}", serde_json::to_string_pretty(&rep)?);
-            } else {
-                print!("{}", dl::render_text(&rep));
+            match if json { Format::Json } else { out.format } {
+                Format::Json => println!("{}", serde_json::to_string_pretty(&rep)?),
+                Format::Compact => print!("{}", dl::render_text(&rep)),
+                Format::Human => {
+                    let style = style_for(&out, std::io::stdout().is_terminal());
+                    let hint = logs
+                        .iter()
+                        .map(|l| l.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    print!(
+                        "{}",
+                        render::diff_logs_human(
+                            &rep,
+                            &s,
+                            &lines_of(&root, &s),
+                            &observed_file,
+                            &hint,
+                            style
+                        )
+                    );
+                }
             }
             if write {
                 let touched = dl::write_suggestions(&rep, &root, &s, &observed_file)?;

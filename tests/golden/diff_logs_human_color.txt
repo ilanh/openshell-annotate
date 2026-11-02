@@ -1,0 +1,63 @@
+[1m🔍 diff-logs[0m  7 events: [1;31m✖ 6 denied[0m · [1;32m✔ 1 allowed[0m
+
+[1m➕ Missing directives[0m[2m  (1)[0m
+
+[1;31m✖ 🌐 missing egress[0m[1m: api.newvendor.io:443[0m[2m  ×1  /usr/bin/python3.12[0m
+  [1;34m=[0m [1;36mwhy:[0m no directive covers this host:port
+  [1;34m=[0m [1;36mwhere:[0m no source line mentions this host; `--write` appends it to openshell/observed-egress.sh
+  [1;34m=[0m [1;32madd:[0m @openshell egress api.newvendor.io:443 reason="observed in sandbox log: /usr/bin/python3.12 (confirm it is needed)" bin=/usr/bin/python3.12
+
+[1m⚙️ Binary not covered[0m[2m  (1)[0m
+
+[1;33m⚠ 🌐 binary mismatch[0m[1m: registry.npmjs.org:443[0m[2m  ×2  /usr/bin/curl[0m
+ [1;34m-->[0m scripts/run.sh:2
+  [1;34m|[0m
+[1;34m1[0m [1;34m|[0m #!/usr/bin/env bash
+[1;32m+[0m [1;34m|[0m [32m# @openshell egress registry.npmjs.org:443 reason="observed in sandbox log: /usr/bin/curl (confirm it is needed)" bin=/usr/bin/curl access=read-only[0m
+[1;34m2[0m [1;34m|[0m # @openshell egress registry.npmjs.org:443 reason="npm install" bin=/usr/local/bin/node access=read-only
+  [1;34m|[0m
+  [1;34m=[0m [1;36mwhy:[0m host:port is annotated at scripts/run.sh:2 but for /usr/local/bin/node; this binary is not in
+         the rule
+
+[1m🔒 L7 rules too narrow[0m[2m  (1)[0m
+
+[1;33m⚠ 🌐 l7 allow[0m[1m: huggingface.co:443[0m[2m  ×1[0m
+ [1;34m-->[0m src/cache.py:3
+  [1;34m|[0m
+[1;34m2[0m [1;34m|[0m # @openshell fs write /workspace/data reason="result cache"
+[1;32m+[0m [1;34m|[0m [32m# @openshell egress huggingface.co:443 reason="observed L7 deny: POST /api/upload (confirm it is needed)" allow="POST:/api/upload" bin=/usr/bin/python3.12[0m
+[1;34m3[0m [1;34m|[0m # @openshell egress huggingface.co:443 reason="model download" allow="GET:/**"
+  [1;34m|[0m
+  [1;34m=[0m [1;36mwhy:[0m method/path not permitted by the rules at src/cache.py:3
+
+[1m👀 Needs a manual look[0m[2m  (1)[0m
+
+[1;36mℹ 🌐 manual review[0m[1m: api.github.com:443[0m[2m  ×1[0m
+ [1;34m-->[0m cmd/main.go:3
+  [1;34m|[0m
+[1;34m2[0m [1;34m|[0m
+[1;34m3[0m [1;34m|[0m // @openshell egress api.github.com:443 reason="release lookup" access=read-only
+[1;34m4[0m [1;34m|[0m // @openshell egress api.github.com:443 reason="release lookup (second call site)" access=read-only
+  [1;34m|[0m
+  [1;34m=[0m [1;36mwhy:[0m POST /repos/a/b/issues denied under access=read-only; raise access or switch cmd/main.go:3 to
+         allow="..." rules
+
+[1m🧹 Stale directives[0m[2m  (1)[0m
+
+[1;33m⚠ 🧹 stale[0m[1m: api.openai.com:443[0m[2m  /usr/local/bin/node[0m
+ [1;34m-->[0m src/llm.ts:1
+  [1;34m|[0m
+[1;34m1[0m [1;34m|[0m // @openshell egress api.openai.com:443 reason="LLM calls" access=read-write
+  [1;34m|[0m
+  [1;34m=[0m [1;36mnote:[0m never matched in these logs (advisory: logs are lossy, remove only after a run that exercised
+          this feature)
+
+[1m⛔ Not actionable[0m[2m  (1)[0m
+
+[1;36mℹ 🌐 blocked[0m[1m: 169.254.169.254:80[0m[2m  ×1[0m
+  [1;34m=[0m [1;36mwhy:[0m always-blocked destination (SSRF protection)
+
+[1;31m✖ 4 suggestions[0m[2m  (1 stale directive · 1 not actionable)[0m
+💡 next: `openshell-annotate diff-logs denied.log --write` inserts 3 directives (review, then regenerate the policy)
+[2mnote: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.6 (#4270).
+[0m
