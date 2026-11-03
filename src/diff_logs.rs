@@ -20,6 +20,9 @@ use std::sync::OnceLock;
 pub enum Action {
     Allowed,
     Denied,
+    /// `NET:FAIL`: the proxy accepted the connection (usually right after an ALLOWED) and then it failed, e.g. the
+    /// client rejected the OpenShell TLS-termination certificate.
+    Failed,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,6 +54,12 @@ fn net_re() -> &'static Regex {
         Regex::new(r"NET:OPEN \[\w+\] (ALLOWED|DENIED) (\S+?)\((\d+)\) -> (\S+?):(\d+)(?: \[policy:(\S+?) engine:(\w+)\])?(?: \[reason:(.*?)\])?\s*$").unwrap()
     })
 }
+fn fail_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"NET:FAIL \[\w+\] (?:(\S+?)\((\d+)\) -> )?(\S+?):(\d+)(?:\s|$)").unwrap()
+    })
+}
 fn http_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -75,7 +84,9 @@ fn parse_json_line(v: &serde_json::Value, source: &str, line: usize) -> Option<E
     if class_uid != 4001 && class_uid != 4002 {
         return None;
     }
+    let failed = class_uid == 4001 && v.get("activity_id").and_then(|a| a.as_u64()) == Some(4);
     let action = match v.get("action").and_then(|a| a.as_str()) {
+        _ if failed => Action::Failed,
         Some(a) => action_of(a),
         None => match v.get("action_id").and_then(|a| a.as_u64()) {
             Some(1) => Action::Allowed,
@@ -155,6 +166,20 @@ pub fn parse_logs(text: &str, source: &str) -> Vec<Event> {
                     .map(|m| m.as_str().to_string())
                     .filter(|p| p != "-"),
                 reason: c.get(8).map(|m| m.as_str().to_string()),
+                source: source.to_string(),
+                line: i + 1,
+            });
+        } else if let Some(c) = fail_re().captures(&line) {
+            out.push(Event {
+                action: Action::Failed,
+                class: "net",
+                binary: c.get(1).map(|m| m.as_str().to_string()),
+                host: c[3].to_string(),
+                port: c[4].parse().ok(),
+                method: None,
+                path: None,
+                policy: None,
+                reason: None,
                 source: source.to_string(),
                 line: i + 1,
             });
@@ -268,7 +293,7 @@ fn non_actionable(e: &Event) -> Option<&'static str> {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Suggestion {
-    /// `missing_egress` | `binary_mismatch` | `l7_allow` | `manual`
+    /// `missing_egress` | `binary_mismatch` | `l7_allow` | `tls_failure` | `manual`
     pub kind: &'static str,
     pub host: String,
     pub port: Option<u16>,
@@ -310,6 +335,9 @@ pub struct Report {
     pub events: usize,
     pub denied: usize,
     pub allowed: usize,
+    /// `NET:FAIL` events (connection allowed, then failed).
+    #[serde(default)]
+    pub failed: usize,
     pub suggestions: Vec<Suggestion>,
     pub stale: Vec<Stale>,
     pub non_actionable: Vec<NonActionable>,
@@ -374,6 +402,71 @@ fn find_mention(scan: &Scan, host: &str) -> Option<String> {
     best
 }
 
+/// How many log lines after an ALLOWED connection a `NET:FAIL` is still attributed to it.
+const FAIL_WINDOW: usize = 10;
+
+/// `NET:OPEN ALLOWED host:443` followed by `NET:FAIL <synthetic ip>:443`: the policy let the connection through but the
+/// client then dropped it. With TLS termination this is almost always a client that does not trust the OpenShell CA.
+fn tls_failures(events: &[Event], rows: &[Row], scan: &Scan, rep: &mut Report) {
+    type Key = (Option<String>, String, Option<u16>);
+    let mut groups: BTreeMap<Key, usize> = BTreeMap::new();
+    let mut last: Option<&Event> = None;
+    for e in events {
+        match e.action {
+            Action::Allowed if e.class == "net" => last = Some(e),
+            Action::Failed => {
+                if let Some(a) = last.filter(|a| {
+                    a.source == e.source && e.line > a.line && e.line - a.line <= FAIL_WINDOW
+                }) {
+                    *groups
+                        .entry((a.binary.clone(), a.host.clone(), a.port))
+                        .or_default() += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    for ((bin, host, port), count) in groups {
+        let row = rows.iter().find(|r| {
+            row_matches_target(r, &host, port)
+                && match (&r.bin, &bin) {
+                    (Some(a), Some(b)) => bin_matches(a, b),
+                    _ => true,
+                }
+        });
+        let skip = row.is_some_and(|r| r.dir.attr("tls") == Some("skip"));
+        let place = row
+            .map(|r| r.dir.loc())
+            .or_else(|| find_mention(scan, &host));
+        let (kind, note) = if skip {
+            (
+                "manual",
+                format!(
+                    "connection allowed but failed {count}x although tls=skip is set at {}: not a certificate problem; check that the upstream is reachable and the port is right",
+                    place.clone().unwrap_or_default()
+                ),
+            )
+        } else {
+            (
+                "tls_failure",
+                format!(
+                    "connection was ALLOWED and then failed ({count}x): the client most likely does not trust the OpenShell TLS-termination CA (rustls with bundled webpki-roots, pinned certificates, a Java truststore). Use `tls=skip` on the egress directive (relays without inspection, so L7 rules stop applying) or make the client trust the sandbox CA bundle"
+                ),
+            )
+        };
+        rep.suggestions.push(Suggestion {
+            kind,
+            host,
+            port,
+            binary: bin,
+            count,
+            directive: None,
+            place,
+            note,
+        });
+    }
+}
+
 pub fn analyze(events: &[Event], scan: &Scan, cfg: &Config) -> Report {
     let rows = rows(scan, cfg);
     let mut rep = Report {
@@ -383,8 +476,10 @@ pub fn analyze(events: &[Event], scan: &Scan, cfg: &Config) -> Report {
             .iter()
             .filter(|e| e.action == Action::Allowed)
             .count(),
+        failed: events.iter().filter(|e| e.action == Action::Failed).count(),
         ..Default::default()
     };
+    tls_failures(events, &rows, scan, &mut rep);
 
     // Denials grouped by (binary, host, port).
     type Key = (Option<String>, String, Option<u16>);

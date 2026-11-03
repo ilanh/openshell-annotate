@@ -106,7 +106,8 @@ by category: 🔑 env 1 · 📁 fs 2 · 🌐 net 5
 ```
 
 `diff-logs` groups what the logs say by what to do about it: missing directives, binaries not covered, L7 rules too narrow,
-things to review by hand, stale directives, deliberate declines and always-blocked destinations. Each fix is previewed as an
+connections that were allowed and then failed (`NET:FAIL` right after an ALLOWED: usually a client that does not trust the
+OpenShell TLS-termination CA; fix with `tls=skip` or by trusting the CA), things to review by hand, stale directives, deliberate declines and always-blocked destinations. Each fix is previewed as an
 inserted `+` line above the line `--write` would put it on; the footer counts suggestions and names the follow-up command.
 
 ```text
