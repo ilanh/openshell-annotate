@@ -432,6 +432,12 @@ pub fn generate(
             for (rk, acc) in &rules {
                 for (h, ps) in acc.eps.keys() {
                     if ps.iter().any(|port| format!("{h}:{port}") == *pe) {
+                        // Different binaries: the profile does not cover this app, so the explicit rule is needed.
+                        if !p.profile_binaries.is_empty()
+                            && !acc.bins.keys().any(|b| p.profile_binaries.contains(b))
+                        {
+                            continue;
+                        }
                         warnings.push(format!(
                             "egress {pe} (rule `{rk}`) duplicates an endpoint the `{}` provider profile adds when attached; keep it only if you want an explicit rule for the binaries listed",
                             p.profile.as_deref().unwrap_or(&p.instance)

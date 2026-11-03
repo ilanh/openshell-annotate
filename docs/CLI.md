@@ -98,6 +98,9 @@ Options:
       --providers-out <PROVIDERS_OUT>
           Write providers here: `.sh` = setup script, anything else = JSON
 
+      --scaffold-profiles <DIR>
+          Write a provider-profile skeleton into DIR for every credential no profile declares. It is built from the egress directives in the file that declares the credential; existing files are kept. Review it, then check it with `openshell provider profile lint -f`
+
       --profiles-dir <PROFILES_DIR>
           Provider-profile directory (overrides [providers].profiles_dir)
 

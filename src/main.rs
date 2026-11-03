@@ -88,6 +88,11 @@ enum Cmd {
         /// Write providers here: `.sh` = setup script, anything else = JSON.
         #[arg(long)]
         providers_out: Option<PathBuf>,
+        /// Write a provider-profile skeleton into DIR for every credential no profile declares. It is built from the
+        /// egress directives in the file that declares the credential; existing files are kept. Review it, then check
+        /// it with `openshell provider profile lint -f`.
+        #[arg(long, value_name = "DIR")]
+        scaffold_profiles: Option<PathBuf>,
         /// Provider-profile directory (overrides [providers].profiles_dir).
         #[arg(long)]
         profiles_dir: Option<PathBuf>,
@@ -319,6 +324,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             paths,
             output,
             providers_out,
+            scaffold_profiles,
             profiles_dir,
             out,
         } => {
@@ -361,6 +367,27 @@ fn run(cli: Cli) -> Result<ExitCode> {
                             g.providers.to_json()
                         };
                         std::fs::write(p, body)?;
+                    }
+                    if let Some(dir) = &scaffold_profiles {
+                        for sk in openshell_annotate::scaffold::scaffold(
+                            &g.providers.unmapped,
+                            &s.directives,
+                            &cfg,
+                        ) {
+                            let path = dir.join(&sk.file_name);
+                            if path.exists() {
+                                eprintln!("kept existing profile {}", path.display());
+                                continue;
+                            }
+                            std::fs::create_dir_all(dir)?;
+                            std::fs::write(&path, &sk.yaml)?;
+                            eprintln!(
+                                "scaffolded profile {} ({} endpoint(s)); review it, then run: openshell provider profile lint -f {}",
+                                path.display(),
+                                sk.endpoints,
+                                path.display()
+                            );
+                        }
                     }
                     match out.format {
                         Format::Compact => eprintln!(

@@ -11,6 +11,7 @@ pub mod lint;
 pub mod providers;
 pub mod render;
 pub mod report;
+pub mod scaffold;
 pub mod scan;
 pub mod spec;
 pub mod validate;
