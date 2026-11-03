@@ -5,7 +5,7 @@ Order matters: each milestone builds on the previous one. Nothing is published (
 | # | Milestone | Status |
 |---|---|---|
 | 1 | Auto-generated docs | done 2026-11-01 |
-| 2 | Docker image | image builds from the public repo (openshell-annotate:dev, ~35 MB); registry publish pending |
+| 2 | Docker image | image builds from the public repo (openshell-annotate:dev, ~35 MB); release workflow publishes ghcr.io/ilanh/openshell-annotate:<version> on a version tag (docs/RELEASING.md), pending the first tag |
 | 3 | GitHub Action + GitLab CI template | next |
 | 4 | AI agent skill hardening and testing | blocked on logins |
 | 5 | VS Code extension | last |

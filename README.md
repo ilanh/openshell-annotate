@@ -8,13 +8,22 @@ un-annotated calls, and gates CI on drift.
 > **Independent community project.** openshell-annotate is not affiliated with, endorsed by, or sponsored by
 > NVIDIA. It uses NVIDIA OpenShell's public policy schema crate (Apache-2.0) to validate what it generates.
 
-Status: early prototype (version 0.1.0, no releases yet). Targets OpenShell policy schema v1
+Status: early prototype (version 0.1.0). Targets OpenShell policy schema v1
 (`openshell-policy-schema` @ v0.1.6). Licensed under Apache-2.0.
 
 ## Install
 
-Prebuilt binaries are not published yet. Build from source (Rust 1.94+ and a C compiler, because the tree-sitter
-grammars are C code; the OpenShell schema crate is fetched from GitHub by cargo):
+Prebuilt binaries (Linux and macOS, x86_64 and arm64) and a container image are attached to each
+[release](https://github.com/ilanh/openshell-annotate/releases) once one is published; see [docs/RELEASING.md](docs/RELEASING.md)
+for installing and for verifying them with `gh attestation verify`:
+
+```
+curl -fsSL https://raw.githubusercontent.com/ilanh/openshell-annotate/main/install.sh | sh
+docker run --rm ghcr.io/ilanh/openshell-annotate:<version> --version
+```
+
+Or build from source (Rust 1.94+ and a C compiler, because the tree-sitter grammars are C code; the OpenShell schema crate
+is fetched from GitHub by cargo):
 
 ```
 git clone https://github.com/ilanh/openshell-annotate && cd openshell-annotate
