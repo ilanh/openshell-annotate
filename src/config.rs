@@ -80,6 +80,12 @@ pub struct ProvidersConfig {
     /// Env var -> profile id overrides.
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    /// Credentials the app reads through lookups no static scan can see (Ruby `ENV[key.to_s.upcase]`, viper
+    /// `SetEnvPrefix` + `GetString`, a library choosing the variable by model name). Each one is treated exactly like an
+    /// `@openshell provider ENV` directive written at `openshell-annotate.toml`: it is mapped to a profile, appears in the
+    /// providers output, and counts as declared for `lint`.
+    #[serde(default)]
+    pub expect: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -181,6 +187,18 @@ impl Config {
             if !matches!(kind.as_str(), "hash" | "slash" | "none") {
                 anyhow::bail!(
                     "{}: scan.comment_leaders.{ext} must be `hash`, `slash` or `none`, not `{kind}`",
+                    path.display()
+                );
+            }
+        }
+        for env in &c.providers.expect {
+            let ok = env.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                && env
+                    .chars()
+                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+            if !ok {
+                anyhow::bail!(
+                    "{}: providers.expect entry `{env}` must be an environment variable name like `GITHUB_PERSONAL_ACCESS_TOKEN`",
                     path.display()
                 );
             }
