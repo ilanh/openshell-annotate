@@ -1,6 +1,6 @@
 [package]
 name = "openshell-annotate"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 edition = "2021"
 rust-version = "1.94"
 description = "Policy-as-code for OpenShell: scan @openshell source directives and generate/validate policy.yaml"
