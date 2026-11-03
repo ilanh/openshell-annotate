@@ -97,6 +97,15 @@ impl Finding {
     }
 }
 
+/// `@openshell egress` takes one `host:port[,port]`, so several hosts need one directive each.
+fn egress_suggestion<S: AsRef<str>>(hosts: &[S]) -> String {
+    hosts
+        .iter()
+        .map(|h| format!("@openshell egress {} reason=\"...\"", h.as_ref()))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 /// Comment syntax + window used to print copy-pasteable directives.
 struct Hints {
     leader: &'static str,
@@ -115,6 +124,14 @@ impl Hints {
     }
     fn dir(&self, d: &str) -> String {
         format!("{} @openshell {d}", self.leader)
+    }
+    /// One copy-pasteable `egress` directive per host (the grammar has no multi-host form).
+    fn egress_dirs<S: AsRef<str>>(&self, hosts: &[S]) -> String {
+        hosts
+            .iter()
+            .map(|h| self.dir(&format!("egress {} reason=\"...\"", h.as_ref())))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
     fn ignore(&self, kind: &str) -> String {
         self.dir(&format!("ignore kind={kind} reason=\"...\""))
@@ -135,8 +152,13 @@ impl Hints {
         } else {
             let list = hosts.join(", ");
             let help = format!(
-                "declare the destination on the line above:\n{}",
-                self.dir(&format!("egress {list} reason=\"...\""))
+                "declare the destination on the line above{}:\n{}",
+                if hosts.len() > 1 {
+                    " (one directive per host)"
+                } else {
+                    ""
+                },
+                self.egress_dirs(hosts)
             );
             f.say(
                 format!("unannotated network call to {list}"),
@@ -161,7 +183,7 @@ impl Hints {
             "this URL is not covered by any @openshell egress".into(),
             Some(format!(
                 "if the program connects there, declare it:\n{}",
-                self.dir(&format!("egress {} reason=\"...\"", all.join(", ")))
+                self.egress_dirs(all)
             )),
             None,
         )
@@ -588,10 +610,7 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
                             if hosts.is_empty() {
                                 " (no literal URL on this line: declare the host with @openshell egress, or @openshell ignore kind=net)".to_string()
                             } else {
-                                format!(
-                                    " (suggest: @openshell egress {} reason=\"...\")",
-                                    hosts.join(", ")
-                                )
+                                format!(" (suggest: {})", egress_suggestion(&hosts))
                             }
                         } else {
                             " (add `@openshell fs write <absolute in-sandbox path> reason=\"...\"`, or `@openshell ignore kind=fs`)".to_string()
@@ -742,14 +761,7 @@ fn lint_sites(
                     let hint = if unknown.is_empty() {
                         " (no literal URL in the arguments: declare the host with @openshell egress, or @openshell ignore kind=net)".to_string()
                     } else {
-                        format!(
-                            " (suggest: @openshell egress {} reason=\"...\")",
-                            unknown
-                                .iter()
-                                .map(|x| x.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
+                        format!(" (suggest: {})", egress_suggestion(&unknown))
                     };
                     net_lines.insert(s.line);
                     out.push(h.net_call(
@@ -765,7 +777,16 @@ fn lint_sites(
                 } else if !unknown.is_empty() && !net_lines.contains(&s.line) {
                     net_lines.insert(s.line);
                     out.push(h.url_literal(
-                        mk(s, Severity::Info, "net", format!("URL literal to {} has no matching @openshell egress (suggest: @openshell egress {} reason=\"...\")", unknown[0], unknown.iter().map(|x| x.as_str()).collect::<Vec<_>>().join(", "))),
+                        mk(
+                            s,
+                            Severity::Info,
+                            "net",
+                            format!(
+                                "URL literal to {} has no matching @openshell egress (suggest: {})",
+                                unknown[0],
+                                egress_suggestion(&unknown)
+                            ),
+                        ),
                         unknown[0],
                         &hosts,
                     ));
