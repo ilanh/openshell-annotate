@@ -9,6 +9,7 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 Merged pull requests:
 
+- test: keep the golden policy independent of the crate version (#35)
 - chore(release): tag-driven release workflow, packaging and installer (#33)
 - feat(generate): propose fs read for image directories outside the baseline (--image) (#32)
 - feat(lint): stop reporting URL literals in docstrings, messages and help text (#31)
