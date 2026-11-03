@@ -104,6 +104,12 @@ Options:
       --profiles-dir <PROFILES_DIR>
           Provider-profile directory (overrides [providers].profiles_dir)
 
+      --image <IMAGE>
+          Container image the policy is for: inspect its WORKDIR, ENTRYPOINT and CMD (docker or podman) and propose `@openshell fs read` for application directories outside OpenShell's baseline read set. Nothing is added automatically
+
+      --image-inspect <FILE>
+          Read `image inspect` JSON from this file instead of running a container tool (for offline CI)
+
       --format <FORMAT>
           Output format
 

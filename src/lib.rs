@@ -6,6 +6,7 @@ pub mod directive;
 pub mod docs;
 pub mod drift;
 pub mod generate;
+pub mod image;
 pub mod lexer;
 pub mod lint;
 pub mod providers;
