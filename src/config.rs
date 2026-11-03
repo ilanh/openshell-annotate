@@ -7,6 +7,14 @@ use std::path::Path;
 
 pub const CONFIG_FILE: &str = "openshell-annotate.toml";
 
+/// Nearest directory at or above `start` that contains `openshell-annotate.toml`.
+pub fn find_root(start: &Path) -> Option<std::path::PathBuf> {
+    start
+        .ancestors()
+        .find(|d| d.join(CONFIG_FILE).is_file())
+        .map(Path::to_path_buf)
+}
+
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -22,6 +30,17 @@ pub struct Config {
     pub lint: LintConfig,
     #[serde(default)]
     pub scan: ScanConfig,
+    #[serde(default, rename = "diff-logs")]
+    pub diff_logs: DiffLogsConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct DiffLogsConfig {
+    /// Path patterns (see `path_matches`) that `diff-logs` never uses as the place for a suggested directive, e.g. the
+    /// probe script that drives the sandbox run. Directives *in* those files still count. The `--observed-file` is always skipped.
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

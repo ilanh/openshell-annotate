@@ -17,7 +17,8 @@ use std::process::ExitCode;
 #[derive(Parser)]
 #[command(name = "openshell-annotate", version, about)]
 struct Cli {
-    /// Repository root: paths in output are relative to it; `openshell-annotate.toml` is read from it.
+    /// Repository root: paths in output are relative to it; `openshell-annotate.toml` is read from it. `diff-logs` run
+    /// without --root looks for that file in the parent directories, so it works from a subdirectory.
     #[arg(long, global = true, default_value = ".")]
     root: PathBuf,
     /// Config file (default: <root>/openshell-annotate.toml if present).
@@ -527,6 +528,25 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 };
                 events.extend(dl::parse_logs(&text, &name));
             }
+            // Like git: when --root was not given, look for openshell-annotate.toml in the parent directories, so the
+            // command works from a subdirectory (e.g. next to the sandbox log).
+            let (root, mut cfg) = match (cli.root == Path::new("."), cli.config.is_none()) {
+                (true, true) => match openshell_annotate::config::find_root(&root) {
+                    Some(r) if r != root => {
+                        eprintln!(
+                            "note: using repository root {} (found {})",
+                            r.display(),
+                            openshell_annotate::config::CONFIG_FILE
+                        );
+                        let c = Config::load_or_default(&r, None)?;
+                        (r, c)
+                    }
+                    _ => (root, cfg),
+                },
+                _ => (root, cfg),
+            };
+            // suggestions never go into the file diff-logs itself writes to
+            cfg.diff_logs.exclude.push(format!("^{observed_file}"));
             let s = do_scan(&root, &[], &cfg)?;
             if report_parse_errors(&s) {
                 return Ok(ExitCode::from(1));
