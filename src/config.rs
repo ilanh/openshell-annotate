@@ -69,7 +69,9 @@ pub struct LintConfig {
     /// A directive covers call sites within this many lines below it.
     #[serde(default = "window")]
     pub window: usize,
-    /// Extra path patterns excluded from lint call-site heuristics (tests are excluded by default); see `path_matches`.
+    /// Extra path patterns excluded from lint call-site heuristics only (tests are excluded by default); see `path_matches`.
+    /// Everything in `[scan].exclude` is already invisible to lint, so list a path here only to keep scanning its directives.
+    /// Patterns are literal, not regexes.
     #[serde(default)]
     pub exclude: Vec<String>,
     /// Call-site categories checked by the heuristics: any of "net", "fs", "env", "exec". Empty = all.
@@ -118,7 +120,9 @@ pub fn path_matches(rel: &str, pat: &str) -> bool {
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ScanConfig {
-    /// Path patterns (see `path_matches`) never scanned (in addition to .gitignore, node_modules, dist, build, target).
+    /// Path patterns (see `path_matches`) never scanned, by `scan`, `generate`, `drift` and `lint` alike (in addition to
+    /// .gitignore, node_modules, dist, build, target). Patterns are literal, not regexes: `^prefix/` anchors at the
+    /// repo root, anything else is a substring of `/<relative path>`. A pattern that matches no file is reported.
     #[serde(default)]
     pub exclude: Vec<String>,
     /// File extension (no dot) -> comment style for languages without first-class support:

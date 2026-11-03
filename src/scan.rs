@@ -33,6 +33,8 @@ pub struct Scan {
     pub errors: Vec<ParseError>,
     /// Source files in languages with no known comment syntax, by extension (see `lexer::KNOWN_UNSCANNED`).
     pub unscanned: std::collections::BTreeMap<String, usize>,
+    /// `[scan].exclude` / `[lint].exclude` patterns that matched no file in a whole-repo scan.
+    pub dead_excludes: Vec<DeadExclude>,
 }
 
 impl Scan {
@@ -50,9 +52,38 @@ impl Scan {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeadExclude {
+    /// `scan` or `lint`.
+    pub section: &'static str,
+    pub pattern: String,
+}
+
+impl DeadExclude {
+    /// True when the pattern uses regex syntax, which `exclude` does not support.
+    pub fn looks_like_regex(&self) -> bool {
+        let p = self.pattern.strip_prefix('^').unwrap_or(&self.pattern);
+        p.contains(['(', ')', '|', '[', ']', '+', '?', '*', '\\', '$'])
+    }
+
+    pub fn note(&self) -> String {
+        let hint = if self.looks_like_regex() {
+            "exclude patterns are not regexes: `^prefix/` anchors at the repo root, anything else is a literal substring of `/<relative path>`; list one entry per directory"
+        } else {
+            "check the spelling: `^prefix/` anchors at the repo root, anything else is a literal substring of `/<relative path>`"
+        };
+        format!(
+            "[{}].exclude pattern `{}` matches no file; {hint}",
+            self.section, self.pattern
+        )
+    }
+}
+
 pub fn rel_path(root: &Path, p: &Path) -> String {
     let r = p.strip_prefix(root).unwrap_or(p);
+    // `scan .` yields `./src/a.ts`; a leading `.` would break `^prefix` excludes and show up in policy comments
     r.components()
+        .filter(|c| !matches!(c, std::path::Component::CurDir))
         .map(|c| c.as_os_str().to_string_lossy().into_owned())
         .collect::<Vec<_>>()
         .join("/")
@@ -66,6 +97,16 @@ pub fn scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
         paths.to_vec()
     };
     let mut files = Vec::new();
+    // exclude patterns that match nothing are almost always typos or regex syntax: report them (whole-repo scans only)
+    let patterns: Vec<(&'static str, String)> = cfg
+        .scan
+        .exclude
+        .iter()
+        .map(|x| ("scan", x.clone()))
+        .chain(cfg.lint.exclude.iter().map(|x| ("lint", x.clone())))
+        .collect();
+    let mut hit = vec![false; patterns.len()];
+    let whole_repo = paths.is_empty() || paths.iter().all(|p| p == root || p == Path::new("."));
     for p in &roots {
         let mut wb = WalkBuilder::new(p);
         wb.hidden(true)
@@ -84,8 +125,13 @@ pub fn scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
                 continue;
             }
             let path = ent.path();
+            let rel = rel_path(root, path);
+            for (i, x) in patterns.iter().enumerate() {
+                if !hit[i] && crate::config::path_matches(&rel, &x.1) {
+                    hit[i] = true;
+                }
+            }
             if Language::detect(path, &cfg.scan.comment_leaders).is_none() {
-                let rel = rel_path(root, path);
                 let skipped = cfg
                     .scan
                     .exclude
@@ -104,7 +150,6 @@ pub fn scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
             if ent.metadata().map(|m| m.len() > MAX_BYTES).unwrap_or(false) {
                 continue;
             }
-            let rel = rel_path(root, path);
             if cfg
                 .scan
                 .exclude
@@ -114,6 +159,16 @@ pub fn scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
                 continue;
             }
             files.push((rel, path.to_path_buf()));
+        }
+    }
+    if whole_repo {
+        for (i, (section, pattern)) in patterns.iter().enumerate() {
+            if !hit[i] {
+                out.dead_excludes.push(DeadExclude {
+                    section,
+                    pattern: pattern.clone(),
+                });
+            }
         }
     }
     files.sort();
