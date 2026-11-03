@@ -20,7 +20,7 @@ Commands:
 
 Options:
       --root <ROOT>
-          Repository root: paths in output are relative to it; `openshell-annotate.toml` is read from it
+          Repository root: paths in output are relative to it; `openshell-annotate.toml` is read from it. `diff-logs` run without --root looks for that file in the parent directories, so it works from a subdirectory
 
           [default: .]
 

@@ -383,9 +383,17 @@ fn spec_attrs(d: &Directive) -> String {
     s
 }
 
-fn find_mention(scan: &Scan, host: &str) -> Option<String> {
+fn find_mention(scan: &Scan, host: &str, cfg: &Config) -> Option<String> {
     let mut best: Option<String> = None;
     for src in &scan.sources {
+        if cfg
+            .diff_logs
+            .exclude
+            .iter()
+            .any(|x| crate::config::path_matches(&src.rel, x))
+        {
+            continue;
+        }
         let test_like = src.rel.contains("test")
             || src.rel.contains("fixture")
             || src.rel.contains("/scripts/");
@@ -407,7 +415,7 @@ const FAIL_WINDOW: usize = 10;
 
 /// `NET:OPEN ALLOWED host:443` followed by `NET:FAIL <synthetic ip>:443`: the policy let the connection through but the
 /// client then dropped it. With TLS termination this is almost always a client that does not trust the OpenShell CA.
-fn tls_failures(events: &[Event], rows: &[Row], scan: &Scan, rep: &mut Report) {
+fn tls_failures(events: &[Event], rows: &[Row], scan: &Scan, cfg: &Config, rep: &mut Report) {
     type Key = (Option<String>, String, Option<u16>);
     let mut groups: BTreeMap<Key, usize> = BTreeMap::new();
     let mut last: Option<&Event> = None;
@@ -437,7 +445,7 @@ fn tls_failures(events: &[Event], rows: &[Row], scan: &Scan, rep: &mut Report) {
         let skip = row.is_some_and(|r| r.dir.attr("tls") == Some("skip"));
         let place = row
             .map(|r| r.dir.loc())
-            .or_else(|| find_mention(scan, &host));
+            .or_else(|| find_mention(scan, &host, cfg));
         let (kind, note) = if skip {
             (
                 "manual",
@@ -479,7 +487,7 @@ pub fn analyze(events: &[Event], scan: &Scan, cfg: &Config) -> Report {
         failed: events.iter().filter(|e| e.action == Action::Failed).count(),
         ..Default::default()
     };
-    tls_failures(events, &rows, scan, &mut rep);
+    tls_failures(events, &rows, scan, cfg, &mut rep);
 
     // Denials grouped by (binary, host, port).
     type Key = (Option<String>, String, Option<u16>);
@@ -541,7 +549,7 @@ pub fn analyze(events: &[Event], scan: &Scan, cfg: &Config) -> Report {
             .filter(|r| row_matches_target(r, host, *port))
             .collect();
         let target = format!("{host}:{}", port.map_or("?".into(), |p| p.to_string()));
-        let place = find_mention(scan, host);
+        let place = find_mention(scan, host, cfg);
         let by = bin.clone().unwrap_or_else(|| "unknown binary".into());
         let bin_attr = bin
             .as_ref()

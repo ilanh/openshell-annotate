@@ -225,6 +225,9 @@ exclude = []               # same pattern syntax (literal, NOT a regex); hides f
 # rb = "hash"              # built in: rb rake gemspec pl pm r (hash); rs java kt kts cs php swift scala dart c h cc cpp hpp (slash)
 [languages]
 # rb = "/usr/bin/ruby"     # default executable for generic languages is keyed by file extension
+[diff-logs]
+exclude = []               # files diff-logs never picks as the place for a suggested directive (e.g. the probe script
+                           # that drives the sandbox run). Same literal pattern syntax. The --observed-file is always skipped.
 ```
 
 ## Limits (be aware)
