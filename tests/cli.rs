@@ -920,6 +920,108 @@ fn lint_ast_follows_fs_imports_and_aliases() {
     );
 }
 
+/// The error of a failed run must be exactly one error line naming `dir_name` and its source, then one hint line.
+fn assert_missing_profiles_dir(o: &Output, dir_name: &str, source: &str, hint: &str) {
+    assert!(!o.status.success(), "a missing profiles dir must fail");
+    let s = err(o);
+    let lines: Vec<&str> = s.lines().collect();
+    assert_eq!(lines.len(), 2, "one error line plus one hint line: {s}");
+    assert!(
+        lines[0].starts_with("error: profiles directory ")
+            && lines[0].contains(dir_name)
+            && lines[0].ends_with(&format!(" ({source}) does not exist")),
+        "error line must name the directory and its source: {s}"
+    );
+    assert_eq!(lines[1], format!("hint: {hint}"), "{s}");
+    assert!(!s.contains("No such file"), "no raw OS error: {s}");
+}
+
+fn set_profiles_config(t: &Path, from: &str, to: &str) {
+    let f = t.join("openshell-annotate.toml");
+    let toml = std::fs::read_to_string(&f).unwrap();
+    assert!(toml.contains(from), "fixture config changed: {toml}");
+    std::fs::write(&f, toml.replace(from, to)).unwrap();
+}
+
+#[test]
+fn missing_profiles_dir_from_config_names_the_key_and_file() {
+    let t = fixture();
+    set_profiles_config(
+        t.path(),
+        "profiles_dir = \"profiles\"",
+        "profiles_dir = \"nope_dir\"",
+    );
+    let o = run(t.path(), &["generate", "-o", "policy.yaml"]);
+    assert_missing_profiles_dir(
+        &o,
+        "nope_dir",
+        "from `[providers] profiles_dir` in openshell-annotate.toml",
+        "create it, fix the path in openshell-annotate.toml, or clone OpenShell",
+    );
+}
+
+#[test]
+fn missing_profiles_dirs_entry_from_config_names_the_key_and_file() {
+    let t = fixture();
+    set_profiles_config(
+        t.path(),
+        "profiles_dir = \"profiles\"",
+        "profiles_dirs = [\"profiles\", \"../OpenShell/providers\"]",
+    );
+    let o = run(t.path(), &["generate", "-o", "policy.yaml"]);
+    assert_missing_profiles_dir(
+        &o,
+        "OpenShell/providers",
+        "from `[providers] profiles_dirs` in openshell-annotate.toml",
+        "create it, fix the path in openshell-annotate.toml, or clone OpenShell",
+    );
+}
+
+#[test]
+fn missing_profiles_dir_from_the_flag_names_the_flag_not_the_config() {
+    let t = fixture();
+    let o = run(
+        t.path(),
+        &[
+            "generate",
+            "--profiles-dir",
+            "nope_flag",
+            "-o",
+            "policy.yaml",
+        ],
+    );
+    assert_missing_profiles_dir(
+        &o,
+        "nope_flag",
+        "from --profiles-dir",
+        "create it, fix the --profiles-dir path, or clone OpenShell",
+    );
+    assert!(
+        !err(&o).contains("openshell-annotate.toml"),
+        "the flag error must not blame the config file: {}",
+        err(&o)
+    );
+}
+
+#[test]
+fn profiles_dir_that_is_not_a_directory_keeps_its_own_error() {
+    let t = fixture();
+    std::fs::write(t.path().join("a_file"), "x").unwrap();
+    set_profiles_config(
+        t.path(),
+        "profiles_dir = \"profiles\"",
+        "profiles_dir = \"a_file\"",
+    );
+    let o = run(t.path(), &["generate", "-o", "policy.yaml"]);
+    assert!(!o.status.success());
+    let s = err(&o);
+    assert!(
+        s.contains("reading profiles dir"),
+        "existing context kept: {s}"
+    );
+    assert!(!s.contains("hint:") && !s.contains("does not exist"), "{s}");
+}
+
 #[test]
 fn profiles_dirs_lists_several_directories_and_profiles_dir_still_works() {
     let t = fixture();
