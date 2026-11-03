@@ -25,6 +25,14 @@ fn fixture() -> tempfile::TempDir {
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample"),
         t.path(),
     );
+    // The golden policy names the tool version in its header; keep it independent of Cargo.toml.
+    let golden = t.path().join("policy.expected.yaml");
+    let text = std::fs::read_to_string(&golden).unwrap();
+    std::fs::write(
+        &golden,
+        text.replace("@VERSION@", env!("CARGO_PKG_VERSION")),
+    )
+    .unwrap();
     t
 }
 
