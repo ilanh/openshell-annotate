@@ -164,16 +164,19 @@ pub(crate) fn find_bin(
         }
     }
     if let Some(lang) = d.lang {
-        if let Some(p) = cfg.languages.get(lang.config_key()) {
-            return Ok((
-                p.clone(),
-                format!("[languages].{} default", lang.config_key()),
-            ));
+        // Generic `#` / `//` languages are keyed by file extension (`[languages] rb = "/usr/bin/ruby"`).
+        let key = match lang {
+            crate::lexer::Language::Hash | crate::lexer::Language::Slash => {
+                d.file.rsplit('.').next().unwrap_or("").to_ascii_lowercase()
+            }
+            _ => lang.config_key().to_string(),
+        };
+        if let Some(p) = cfg.languages.get(&key) {
+            return Ok((p.clone(), format!("[languages].{key} default")));
         }
         return Err(format!(
-            "{}: no executable known for this egress: add `bin=/real/path` or a `@openshell bin /real/path` line in the file, or set [languages].{} in openshell-annotate.toml (an empty `binaries` list allows nothing)",
+            "{}: no executable known for this egress: add `bin=/real/path` or a `@openshell bin /real/path` line in the file, or set [languages].{key} in openshell-annotate.toml (an empty `binaries` list allows nothing)",
             d.loc(),
-            lang.config_key()
         ));
     }
     Err(format!("{}: cannot determine the executable", d.loc()))

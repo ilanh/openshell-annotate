@@ -194,6 +194,9 @@ fn urls_in(nodes: &[Node], src: &str) -> Vec<String> {
 
 /// Parse and extract sites. `None` when the grammar cannot be loaded or parsing fails outright.
 pub fn sites(lang: Language, rel: &str, text: &str) -> Option<Vec<Site>> {
+    if matches!(lang, Language::Hash | Language::Slash) {
+        return None; // no grammar: directives only, no call-site heuristics
+    }
     let mut parser = Parser::new();
     parser.set_language(&language_for(lang, rel)).ok()?;
     let tree = parser.parse(text, None)?;
@@ -207,6 +210,7 @@ pub fn sites(lang: Language, rel: &str, text: &str) -> Option<Vec<Site>> {
             Language::Python => py(n, text, &mut out),
             Language::Go => go(n, text, &mut out),
             Language::Shell => sh(n, text, &mut out),
+            Language::Hash | Language::Slash => {}
         }
         url_literal(n, text, &mut out);
         if cur.goto_first_child() {
@@ -233,7 +237,7 @@ fn language_for(lang: Language, rel: &str) -> tree_sitter::Language {
         },
         Language::Python => tree_sitter_python::LANGUAGE.into(),
         Language::Go => tree_sitter_go::LANGUAGE.into(),
-        Language::Shell => tree_sitter_bash::LANGUAGE.into(),
+        Language::Shell | Language::Hash | Language::Slash => tree_sitter_bash::LANGUAGE.into(),
     }
 }
 
@@ -241,6 +245,9 @@ fn language_for(lang: Language, rel: &str) -> tree_sitter::Language {
 /// tell a JS regex literal from a division, so a stray quote inside a regex can turn the rest of a big file into a
 /// "string" and hide its directives; the grammar does not have that problem.
 pub fn comments(lang: Language, rel: &str, text: &str) -> Option<Vec<crate::lexer::Comment>> {
+    if matches!(lang, Language::Hash | Language::Slash) {
+        return None;
+    }
     let mut parser = Parser::new();
     parser.set_language(&language_for(lang, rel)).ok()?;
     let tree = parser.parse(text, None)?;

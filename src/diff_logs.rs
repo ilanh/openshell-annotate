@@ -604,7 +604,7 @@ pub fn analyze(events: &[Event], scan: &Scan, cfg: &Config) -> Report {
 
 pub fn leader(lang: Language) -> &'static str {
     match lang {
-        Language::Python | Language::Shell => "#",
+        Language::Python | Language::Shell | Language::Hash => "#",
         _ => "//",
     }
 }
