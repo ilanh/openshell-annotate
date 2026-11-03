@@ -482,6 +482,7 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
                 None
             }
         })
+        .chain(cfg.providers.expect.iter().map(String::as_str))
         .collect();
     let fs_roots: Vec<String> = scan
         .directives

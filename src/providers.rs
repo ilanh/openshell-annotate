@@ -131,6 +131,13 @@ pub fn resolve(dirs: &[Directive], cfg: &Config, profiles: &[Profile]) -> Provid
             e.2.push(d.loc());
         }
     }
+    for env in &cfg.providers.expect {
+        let e = envs.entry(env.clone()).or_default();
+        e.2.push(format!(
+            "{}: [providers].expect",
+            crate::config::CONFIG_FILE
+        ));
+    }
     let mut by_instance: BTreeMap<String, ProviderEntry> = BTreeMap::new();
     let mut unmapped = Vec::new();
     for (env, (prof, name, sources)) in envs {

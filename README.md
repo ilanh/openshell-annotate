@@ -210,6 +210,9 @@ system_paths = "auto"     # auto: add /usr /lib /etc /proc /dev/urandom (ro) and
 profiles_dir = "/path/to/OpenShell/providers"
 [providers.env]           # env var -> profile id overrides
 [providers]
+expect = []               # credentials read through dynamic lookups no scan can see, e.g. ["GITHUB_PERSONAL_ACCESS_TOKEN"]; each is treated
+                          # like an `@openshell provider ENV` directive (mapped to a profile, in the providers output, satisfies lint)
+[providers]
 profiles_dirs = ["openshell/profiles"]   # extra directories of custom provider profiles (also lintable with `openshell profile lint -f`)
 [lint]
 engine = "treesitter"      # or "regex" (the original line heuristics)
@@ -243,6 +246,10 @@ exclude = []               # files diff-logs never picks as the place for a sugg
   example `.lua`, `.ex`, `.hs`) are counted and reported on stderr as `note: N .ext files were not scanned`. When you
   cannot or do not want to edit the source, keep the directives in a sidecar `.sh` file (comments only); it is scanned like any
   other shell file. A first-class sidecar annotations file is tracked in #20.
+- Dynamic environment lookups are invisible to lint and provider detection: Ruby `ENV[key.to_s.upcase]`, Go viper
+  (`SetEnvPrefix("github")` + `GetString("personal_access_token")`), a Python library such as litellm picking the variable
+  by model name. Nothing static can resolve them. Declare the credential once, either with `@openshell provider ENV` next to
+  the code or, when there is no good place for a comment, with `[providers] expect = ["ENV"]` in `openshell-annotate.toml`.
 - JS regex literals are not parsed; Python docstrings are strings (directives must be `#` comments).
 - Filesystem/process/landlock are startup-only in OpenShell; drift labels them `startup`.
 - `diff-logs` only sees network and L7 events: OpenShell 0.1.6 does not log Landlock/filesystem denials (upstream #4270), log
