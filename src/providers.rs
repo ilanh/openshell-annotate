@@ -16,6 +16,8 @@ pub struct Profile {
     pub env_vars: Vec<String>,
     /// `host:port` entries the profile contributes to the effective policy.
     pub endpoints: Vec<String>,
+    /// Binaries the profile allows to use its endpoints (empty when the profile does not say).
+    pub binaries: Vec<String>,
     pub file: PathBuf,
 }
 
@@ -78,10 +80,20 @@ pub fn load_profiles(dir: &Path) -> Result<Vec<Profile>> {
                 }
             }
         }
+        let binaries = v
+            .get("binaries")
+            .and_then(|b| b.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
         out.push(Profile {
             id: id.to_string(),
             env_vars,
             endpoints,
+            binaries,
             file: p,
         });
     }
@@ -100,6 +112,9 @@ pub struct ProviderEntry {
     pub profile_endpoints: Vec<String>,
     #[serde(skip)]
     pub profile_file: Option<PathBuf>,
+    /// Binaries the profile allows (not part of the providers JSON).
+    #[serde(skip)]
+    pub profile_binaries: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -162,6 +177,7 @@ pub fn resolve(dirs: &[Directive], cfg: &Config, profiles: &[Profile]) -> Provid
                         sources: vec![],
                         profile_endpoints: known.map(|k| k.endpoints.clone()).unwrap_or_default(),
                         profile_file: known.map(|k| k.file.clone()),
+                        profile_binaries: known.map(|k| k.binaries.clone()).unwrap_or_default(),
                     });
                 e.credentials.push(env);
                 e.sources.extend(sources);
@@ -232,7 +248,7 @@ impl ProvidersOut {
         }
         for u in &self.unmapped {
             s.push_str(&format!(
-                "# UNMAPPED: no provider profile declares {} (used at {}).\n#   Write a custom profile (`openshell profile lint -f`), import it, or set [providers.env] in openshell-annotate.toml.\n\n",
+                "# UNMAPPED: no provider profile declares {} (used at {}).\n#   Run `openshell-annotate generate --scaffold-profiles DIR` for a skeleton, then lint it (`openshell provider profile lint -f`) and import it, or set [providers.env] in openshell-annotate.toml.\n\n",
                 u.env,
                 u.sources.join(", ")
             ));

@@ -35,7 +35,7 @@ const r = await fetch("https://api.openai.com/v1/chat/completions", { ... });
 | Command | What it does |
 |---|---|
 | `scan [PATHS] [--format human\|json\|compact] [--color ...] [--no-icons]` | list directives with `file:line` (JS/TS, Python, Go, shell, Dockerfile comments; string-aware lexer) |
-| `generate [PATHS] -o policy.yaml [--providers-out f.json\|f.sh] [--profiles-dir DIR] [--format ...]` | emit policy.yaml with a comment per entry; re-validated with the OpenShell schema crate; providers as JSON or a setup script |
+| `generate [PATHS] -o policy.yaml [--providers-out f.json\|f.sh] [--scaffold-profiles DIR] [--profiles-dir DIR] [--format ...]` | emit policy.yaml with a comment per entry; re-validated with the OpenShell schema crate; providers as JSON or a setup script |
 | `lint [PATHS] [--policy policy.yaml] [--deny-warnings] [--format human\|json\|compact] [--color auto\|always\|never] [--no-icons]` | directive validation + tree-sitter detection (JS/TS, Python, Go, bash) of un-annotated network calls, URL literals, filesystem writes, secret reads, subprocesses; sanity-checks a policy file |
 | `diff-logs LOG... [--write] [--deny-stale] [--format human\|json\|compact] [--color ...] [--no-icons]` | map sandbox allow/deny events (`openshell logs` shorthand or OCSF JSONL, `-` = stdin) to directives by binary, host, port: suggests missing directives (`--write` inserts them), flags stale ones, separates non-actionable (SSRF/metadata) and declined (`ignore kind=net host=`) denials; exit 1 when something is missing |
 | `drift [PATHS] --policy policy.yaml [--providers f.json] [--strict]` | regenerate in memory and compare as typed documents; reports missing / extra / changed, tagged `startup` or `live` |
@@ -234,6 +234,23 @@ exclude = []               # same pattern syntax (literal, NOT a regex); hides f
 exclude = []               # files diff-logs never picks as the place for a suggested directive (e.g. the probe script
                            # that drives the sandbox run). Same literal pattern syntax. The --observed-file is always skipped.
 ```
+
+### Credentials with no provider profile
+
+`@openshell provider ENV` needs a provider profile that declares `ENV`; the bundled OpenShell profiles cover the common
+cloud APIs only. For every credential nothing declares (reported as `unmapped`), `generate --scaffold-profiles DIR` writes
+`DIR/<env-lowercased-with-hyphens>.yaml`: the credential, and the endpoints, `access` and binaries taken from the `egress`
+directives in the file that declares it (`tls=skip` endpoints get `allow_uninspected_credentials: true`, which OpenShell
+requires). Files that already exist are kept. Review the auth style, then check and import it:
+
+```
+openshell-annotate generate -o openshell/policy.yaml --providers-out openshell/providers.sh --scaffold-profiles openshell/profiles
+openshell provider profile lint -f openshell/profiles/context7-api-key.yaml
+```
+
+Add the directory to `[providers] profiles_dirs` so the next `generate` maps the credential.
+The "duplicates an endpoint a provider profile adds" warning is only shown when the profile's `binaries` include a binary of
+the rule; a profile bound to other binaries (the bundled `github` profile is for `gh`/`git`) does not cover your app, so the explicit rule is needed.
 
 ## Limits (be aware)
 
