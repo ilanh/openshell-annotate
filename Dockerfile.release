@@ -1,0 +1,10 @@
+# Release image: the static musl binaries built and attested by .github/workflows/release.yml, nothing else.
+# The workflow places them in dist-docker/linux-{amd64,arm64}/openshell-annotate before `docker buildx build`.
+# For a local image built from source use the main Dockerfile (scripts/docker-build.sh).
+FROM gcr.io/distroless/static-debian12
+ARG TARGETARCH
+COPY dist-docker/linux-${TARGETARCH}/openshell-annotate /usr/local/bin/openshell-annotate
+LABEL org.opencontainers.image.description="Policy-as-code for OpenShell: @openshell source directives -> policy.yaml"
+WORKDIR /src
+ENTRYPOINT ["/usr/local/bin/openshell-annotate"]
+CMD ["--help"]
