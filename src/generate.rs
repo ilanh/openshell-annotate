@@ -209,12 +209,25 @@ fn clean(s: &str) -> String {
         .chars()
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect();
-    let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
-    if t.chars().count() > 160 {
-        format!("{}...", t.chars().take(157).collect::<String>())
-    } else {
-        t
+    t.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Comment text width (columns) at which long reasons are wrapped onto further `#` lines.
+const COMMENT_WIDTH: usize = 100;
+
+/// Break `text` at spaces into lines of at most `width` characters; a single longer word stays whole.
+fn wrap_words(text: &str, width: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split(' ') {
+        match lines.last_mut() {
+            Some(l) if l.chars().count() + 1 + word.chars().count() <= width => {
+                l.push(' ');
+                l.push_str(word);
+            }
+            _ => lines.push(word.to_string()),
+        }
     }
+    lines
 }
 
 fn comment_lines(sources: &[(String, String)], indent: &str, out: &mut String) {
@@ -222,7 +235,12 @@ fn comment_lines(sources: &[(String, String)], indent: &str, out: &mut String) {
         if reason.is_empty() {
             out.push_str(&format!("{indent}# {loc}\n"));
         } else {
-            out.push_str(&format!("{indent}# {} ({loc})\n", clean(reason)));
+            // The full reason is kept: it is the audit trail for the rule. Long ones wrap onto further comment lines.
+            let text = format!("{} ({loc})", clean(reason));
+            let width = COMMENT_WIDTH.saturating_sub(indent.len() + 2).max(40);
+            for line in wrap_words(&text, width) {
+                out.push_str(&format!("{indent}# {line}\n"));
+            }
         }
     }
     if sources.len() > MAX_SOURCES_SHOWN {
@@ -557,4 +575,23 @@ pub fn generate(
         warnings,
         stats,
     })
+}
+
+#[cfg(test)]
+mod wrap_tests {
+    use super::*;
+
+    #[test]
+    fn wraps_at_words_and_never_drops_text() {
+        let text = "alpha beta gamma delta epsilon zeta eta theta";
+        let lines = wrap_words(text, 16);
+        assert_eq!(lines.join(" "), text);
+        assert!(lines.iter().all(|l| l.chars().count() <= 16), "{lines:?}");
+        assert_eq!(wrap_words("short", 16), vec!["short"]);
+        // one overlong word stays whole instead of being cut
+        assert_eq!(
+            wrap_words("a verylongwordhere b", 5),
+            vec!["a", "verylongwordhere", "b"]
+        );
+    }
 }
