@@ -14,6 +14,7 @@ fn run(dir: &Path, args: &[&str]) -> Output {
         .unwrap()
 }
 
+#[allow(dead_code)]
 fn out(o: &Output) -> String {
     String::from_utf8_lossy(&o.stdout).into_owned()
 }
