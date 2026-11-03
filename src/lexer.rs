@@ -1,4 +1,4 @@
-//! Comment lexer for JS/TS, Python, Go and shell.
+//! Comment lexer for JS/TS, Python, Go and shell, plus generic `#` and `//` leaders for other languages.
 //!
 //! The lexer is string-aware: `//` or `#` inside a string literal, template
 //! literal, Python triple-quoted string or shell heredoc is not a comment.
@@ -20,9 +20,67 @@ pub enum Language {
     Python,
     Go,
     Shell,
+    /// Any other language whose line comments start with `#` (Ruby, Perl, R, ...), chosen by extension.
+    Hash,
+    /// Any other language whose comments start with `//` or `/* */` (Rust, Java, C#, Kotlin, ...), chosen by extension.
+    Slash,
 }
 
+/// Extensions with a built-in comment leader beyond the four first-class languages.
+/// Override or extend with `[scan.comment_leaders]` in `openshell-annotate.toml`.
+pub const DEFAULT_LEADERS: &[(&str, &str)] = &[
+    ("rb", "hash"),
+    ("rake", "hash"),
+    ("gemspec", "hash"),
+    ("pl", "hash"),
+    ("pm", "hash"),
+    ("r", "hash"),
+    ("rs", "slash"),
+    ("java", "slash"),
+    ("kt", "slash"),
+    ("kts", "slash"),
+    ("cs", "slash"),
+    ("php", "slash"),
+    ("swift", "slash"),
+    ("scala", "slash"),
+    ("dart", "slash"),
+    ("c", "slash"),
+    ("h", "slash"),
+    ("cc", "slash"),
+    ("cpp", "slash"),
+    ("hpp", "slash"),
+];
+
+/// Source-code extensions we do not know a comment leader for; files with these are reported as "not scanned".
+pub const KNOWN_UNSCANNED: &[&str] = &[
+    "lua", "ex", "exs", "erl", "hs", "ml", "clj", "cljs", "jl", "zig", "groovy", "vb", "fs", "nim",
+    "cr", "v", "sol", "tf",
+];
+
 impl Language {
+    /// Language of a file, honouring `[scan.comment_leaders]` (extension -> `hash` | `slash` | `none`).
+    /// First-class languages always win; `none` switches a built-in default off.
+    pub fn detect(
+        path: &Path,
+        overrides: &std::collections::BTreeMap<String, String>,
+    ) -> Option<Self> {
+        if let Some(l) = Self::from_path(path) {
+            return Some(l);
+        }
+        let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+        let kind = overrides.get(&ext).map(String::as_str).or_else(|| {
+            DEFAULT_LEADERS
+                .iter()
+                .find(|(e, _)| *e == ext)
+                .map(|(_, k)| *k)
+        })?;
+        match kind {
+            "hash" => Some(Language::Hash),
+            "slash" => Some(Language::Slash),
+            _ => None,
+        }
+    }
+
     pub fn from_path(path: &Path) -> Option<Self> {
         let name = path.file_name()?.to_str()?;
         if name == "Dockerfile"
@@ -49,6 +107,8 @@ impl Language {
             Language::Python => "python",
             Language::Go => "go",
             Language::Shell => "shell",
+            Language::Hash => "hash",
+            Language::Slash => "slash",
         }
     }
 }
@@ -76,6 +136,8 @@ pub fn lex(lang: Language, src: &str) -> Lexed {
         Language::Go => lex_clike(src, true),
         Language::Python => lex_hash(src, true, false),
         Language::Shell => lex_hash(src, false, true),
+        Language::Hash => lex_hash(src, false, false),
+        Language::Slash => lex_clike(src, true),
     }
 }
 

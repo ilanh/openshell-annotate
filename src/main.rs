@@ -195,7 +195,11 @@ fn load_profiles(cfg: &Config, cli_dir: Option<&Path>, root: &Path) -> Result<Ve
 }
 
 fn do_scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
-    scan::scan(root, paths, cfg)
+    let s = scan::scan(root, paths, cfg)?;
+    for n in s.unscanned_notes() {
+        eprintln!("note: {n}");
+    }
+    Ok(s)
 }
 
 fn style_for(o: &OutputOpts, stream_is_tty: bool) -> Style {

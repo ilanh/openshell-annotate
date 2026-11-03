@@ -218,6 +218,10 @@ exclude = []               # "^prefix/" anchors at the repo root; anything else 
 categories = []            # restrict call-site heuristics to any of "net", "fs", "env", "exec" (empty = all)
 [scan]
 exclude = []               # same pattern syntax as [lint].exclude
+[scan.comment_leaders]     # extension -> "hash" (#) | "slash" (// and /* */) | "none"; extends/overrides the built-ins
+# rb = "hash"              # built in: rb rake gemspec pl pm r (hash); rs java kt kts cs php swift scala dart c h cc cpp hpp (slash)
+[languages]
+# rb = "/usr/bin/ruby"     # default executable for generic languages is keyed by file extension
 ```
 
 ## Limits (be aware)
@@ -227,6 +231,12 @@ exclude = []               # same pattern syntax as [lint].exclude
   a write whose path is computed cannot be proven statically, so it is one repo-level info (or one warning per file when no
   root is declared at all). Writes through an already-open `FileHandle` are not seen. `fs.mkdir` etc. are only recognised
   as fs calls when imported from `fs`, `node:fs`, `fs/promises`, `fs-extra` (or called on an object named like `fs`).
+- Languages: JS/TS, Python, Go and shell are first-class (string-aware lexing and lint call-site detection). Ruby, Rust,
+  Java, Kotlin, C#, PHP, Swift, Scala, Dart, C/C++ and a few more are read for `@openshell` comments only (generic `#` or `//`
+  lexer, no call-site lint). Map more extensions with `[scan.comment_leaders]`. Files in other known source languages (for
+  example `.lua`, `.ex`, `.hs`) are counted and reported on stderr as `note: N .ext files were not scanned`. When you
+  cannot or do not want to edit the source, keep the directives in a sidecar `.sh` file (comments only); it is scanned like any
+  other shell file. A first-class sidecar annotations file is tracked in #20.
 - JS regex literals are not parsed; Python docstrings are strings (directives must be `#` comments).
 - Filesystem/process/landlock are startup-only in OpenShell; drift labels them `startup`.
 - `diff-logs` only sees network and L7 events: OpenShell 0.1.6 does not log Landlock/filesystem denials (upstream #4270), log

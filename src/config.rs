@@ -121,6 +121,11 @@ pub struct ScanConfig {
     /// Path patterns (see `path_matches`) never scanned (in addition to .gitignore, node_modules, dist, build, target).
     #[serde(default)]
     pub exclude: Vec<String>,
+    /// File extension (no dot) -> comment style for languages without first-class support:
+    /// `hash` (`#`), `slash` (`//` and `/* */`) or `none` (do not scan). Built-in defaults cover
+    /// rb, rs, java, kt, cs, php, swift, scala and a few more; entries here override them.
+    #[serde(default)]
+    pub comment_leaders: BTreeMap<String, String>,
 }
 
 fn auto() -> String {
@@ -148,6 +153,14 @@ impl Config {
                 "{}: policy.enforcement must be `enforce` or `audit`",
                 path.display()
             );
+        }
+        for (ext, kind) in &c.scan.comment_leaders {
+            if !matches!(kind.as_str(), "hash" | "slash" | "none") {
+                anyhow::bail!(
+                    "{}: scan.comment_leaders.{ext} must be `hash`, `slash` or `none`, not `{kind}`",
+                    path.display()
+                );
+            }
         }
         Ok(c)
     }

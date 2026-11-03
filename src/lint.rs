@@ -107,7 +107,7 @@ impl Hints {
     fn new(lang: Language, cfg: &Config) -> Self {
         Hints {
             leader: match lang {
-                Language::Python | Language::Shell => "#",
+                Language::Python | Language::Shell | Language::Hash => "#",
                 _ => "//",
             },
             window: cfg.lint.window,
@@ -292,7 +292,10 @@ fn patterns(lang: Language) -> &'static Vec<Pat> {
     static PY: OnceLock<Vec<Pat>> = OnceLock::new();
     static GO: OnceLock<Vec<Pat>> = OnceLock::new();
     static SH: OnceLock<Vec<Pat>> = OnceLock::new();
+    static NONE: OnceLock<Vec<Pat>> = OnceLock::new();
     match lang {
+        // generic `#` / `//` languages: directives are read, but there are no call-site heuristics
+        Language::Hash | Language::Slash => NONE.get_or_init(Vec::new),
         Language::JavaScript => JS.get_or_init(|| {
             vec![
                 p("net", "fetch()", r"(?:^|[^.\w])fetch\s*\(|globalThis\.fetch\s*\("),
@@ -354,6 +357,7 @@ fn env_name_re(lang: Language) -> Regex {
         }
         Language::Go => r#"os\.Getenv\(\s*"([A-Z][A-Z0-9_]*)""#,
         Language::Shell => r"\$\{?([A-Z][A-Z0-9_]*)",
+        Language::Hash | Language::Slash => r"\A\z\b", // never matches
     })
     .unwrap()
 }

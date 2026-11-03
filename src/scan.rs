@@ -31,6 +31,23 @@ pub struct Scan {
     pub sources: Vec<Source>,
     pub directives: Vec<Directive>,
     pub errors: Vec<ParseError>,
+    /// Source files in languages with no known comment syntax, by extension (see `lexer::KNOWN_UNSCANNED`).
+    pub unscanned: std::collections::BTreeMap<String, usize>,
+}
+
+impl Scan {
+    /// One human-readable note per extension that was skipped, for stderr.
+    pub fn unscanned_notes(&self) -> Vec<String> {
+        self.unscanned
+            .iter()
+            .map(|(ext, n)| {
+                format!(
+                    "{n} .{ext} file{} not scanned (no comment syntax known); if its comments start with `#` or `//`, set `[scan.comment_leaders] {ext} = \"hash\"` (or \"slash\") in openshell-annotate.toml to read @openshell comments there",
+                    if *n == 1 { " was" } else { "s were" }
+                )
+            })
+            .collect()
+    }
 }
 
 pub fn rel_path(root: &Path, p: &Path) -> String {
@@ -67,7 +84,21 @@ pub fn scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
                 continue;
             }
             let path = ent.path();
-            if Language::from_path(path).is_none() {
+            if Language::detect(path, &cfg.scan.comment_leaders).is_none() {
+                let rel = rel_path(root, path);
+                let skipped = cfg
+                    .scan
+                    .exclude
+                    .iter()
+                    .any(|x| crate::config::path_matches(&rel, x));
+                if let (Some(ext), false) = (path.extension().and_then(|e| e.to_str()), skipped) {
+                    let ext = ext.to_ascii_lowercase();
+                    if crate::lexer::KNOWN_UNSCANNED.contains(&ext.as_str())
+                        || cfg.scan.comment_leaders.get(&ext).map(String::as_str) == Some("none")
+                    {
+                        *out.unscanned.entry(ext).or_insert(0) += 1;
+                    }
+                }
                 continue;
             }
             if ent.metadata().map(|m| m.len() > MAX_BYTES).unwrap_or(false) {
@@ -91,7 +122,7 @@ pub fn scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
         let Ok(src) = std::fs::read_to_string(&path) else {
             continue;
         };
-        let lang = Language::from_path(&path).unwrap();
+        let lang = Language::detect(&path, &cfg.scan.comment_leaders).unwrap();
         let mut lexed = lex(lang, &src);
         if lang == Language::JavaScript {
             // the grammar knows regex literals and JSX; the hand-written lexer does not
