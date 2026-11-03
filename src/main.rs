@@ -96,6 +96,13 @@ enum Cmd {
         /// Provider-profile directory (overrides [providers].profiles_dir).
         #[arg(long)]
         profiles_dir: Option<PathBuf>,
+        /// Container image the policy is for: inspect its WORKDIR, ENTRYPOINT and CMD (docker or podman) and propose
+        /// `@openshell fs read` for application directories outside OpenShell's baseline read set. Nothing is added automatically.
+        #[arg(long, value_name = "IMAGE")]
+        image: Option<String>,
+        /// Read `image inspect` JSON from this file instead of running a container tool (for offline CI).
+        #[arg(long, value_name = "FILE", requires = "image")]
+        image_inspect: Option<PathBuf>,
         #[command(flatten)]
         out: OutputOpts,
     },
@@ -326,6 +333,8 @@ fn run(cli: Cli) -> Result<ExitCode> {
             providers_out,
             scaffold_profiles,
             profiles_dir,
+            image,
+            image_inspect,
             out,
         } => {
             use std::io::IsTerminal;
@@ -427,6 +436,53 @@ fn run(cli: Cli) -> Result<ExitCode> {
                                     style
                                 )
                             );
+                        }
+                    }
+                    if let Some(img) = &image {
+                        let info = match &image_inspect {
+                            Some(f) => openshell_annotate::image::from_file(f),
+                            None => openshell_annotate::image::inspect(img),
+                        };
+                        match info {
+                            Ok(info) => {
+                                let declared: Vec<String> = s
+                                    .directives
+                                    .iter()
+                                    .filter_map(|d| match &d.kind {
+                                        openshell_annotate::directive::Kind::Fs {
+                                            path, ..
+                                        } => Some(path.clone()),
+                                        _ => None,
+                                    })
+                                    .collect();
+                                let mut props = openshell_annotate::image::propose(
+                                    &info,
+                                    &declared,
+                                    cfg.policy.include_workdir,
+                                );
+                                if image_inspect.is_none() {
+                                    match openshell_annotate::image::list_app_dirs(img) {
+                                        Ok(dirs) => openshell_annotate::image::add_dirs(
+                                            &mut props, dirs, &declared,
+                                        ),
+                                        Err(e) => eprintln!("note: could not list the image filesystem ({e:#}); using WORKDIR, ENTRYPOINT and CMD only"),
+                                    }
+                                }
+                                if declared.is_empty() {
+                                    eprintln!("image {img}: the policy has no filesystem section (no `fs` directive), so file access is not restricted and nothing needs declaring");
+                                } else if props.is_empty() {
+                                    eprintln!("image {img}: WORKDIR, ENTRYPOINT and CMD are all inside the baseline read set or declared fs paths");
+                                } else {
+                                    eprint!(
+                                        "{}",
+                                        openshell_annotate::image::render_note(img, &props)
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("error: {e:#}");
+                                return Ok(ExitCode::from(1));
+                            }
                         }
                     }
                     Ok(ExitCode::SUCCESS)

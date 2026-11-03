@@ -78,6 +78,18 @@ For scripts, CI and AI agents use a stable format: `--format compact` prints one
 finding, and `--format json` (alias `--json`) prints the JSON array. Both keep the old `lint: N directive(s); ...` summary on
 stderr. Exit codes and `--deny-warnings` do not depend on the format.
 
+### Files the image keeps outside OpenShell's baseline (`generate --image`)
+
+OpenShell 0.1.6 only lets the sandbox read `/usr /lib /etc /app /var/log /proc /dev/urandom` (plus the workspace when
+`include_workdir` is on) once a `filesystem_policy` exists, and it does not log filesystem denials
+([NVIDIA/OpenShell#4270](https://github.com/NVIDIA/OpenShell/issues/4270)), so an application under `/opt/<app>` fails with a bare
+`EACCES`. `generate --image IMAGE` inspects the image (docker, then podman: WORKDIR, ENTRYPOINT, CMD, and the directory
+layout from a throw-away `create` + `export | tar -t`; nothing is started) and prints, on stderr, a proposal such as
+`# @openshell fs read /opt/context7 reason="..."` for each directory that is neither in the baseline nor under a declared
+`fs` path. It never edits the policy and the YAML on stdout is unchanged. When the code declares no `fs` directive there is no
+`filesystem_policy` and nothing is restricted, so no proposal is made. `--image-inspect FILE` reads a saved
+`docker image inspect` JSON instead of running a container tool (the directory listing is skipped).
+
 ### Readable output for `scan`, `generate` and `diff-logs`
 
 The other commands share the lint report's look and flags (`--format human|json|compact`, `--color auto|always|never`,
