@@ -72,6 +72,8 @@ Rules of thumb (least privilege):
 2. Literal host and port, e.g. `api.openai.com:443`. Add `access=read-only` for read-only APIs, or
    `allow="POST:/v1/chat/completions"` rules when the API surface is small. Use `access=full` only when
    needed and say why. Avoid wildcards; if unavoidable use `*.example.com` (>= 3 labels, never `*.com`).
+   One host per directive: `host:443` or `host:443,8443` (ports only). There is no comma-separated host list, so
+   `pypi.org:443,files.pythonhosted.org:443` is an error: write one `egress` line per host.
 3. Binary: rely on `[languages]` for the usual interpreter. Use `bin=` when a subprocess makes the call
    (`bin=/usr/bin/git`), or a `@openshell bin` line for a whole file. Never invent a path: confirm it in the image.
 4. User-configurable or dynamic endpoints (`baseUrl` from settings): annotate the **default/documented**
@@ -95,7 +97,8 @@ Examples (same grammar in every language):
 const res = await fetch("https://api.anthropic.com/v1/messages", { ... });
 ```
 ```python
-# @openshell egress pypi.org:443,files.pythonhosted.org:443 reason="pip install at start" access=read-only
+# @openshell egress pypi.org:443 reason="pip install at start" access=read-only
+# @openshell egress files.pythonhosted.org:443 reason="pip install at start (wheel downloads)" access=read-only
 # @openshell fs write /workspace/cache reason="model cache"
 ```
 ```go
