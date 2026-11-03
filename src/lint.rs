@@ -527,6 +527,7 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
                         provider_envs: &provider_envs,
                         fs_roots: &fs_roots,
                         egress: &egress,
+                        ignore_hosts: &cfg.lint.ignore_hosts,
                     },
                     &covered,
                     &h,
@@ -674,12 +675,20 @@ struct Ctx<'a> {
     provider_envs: &'a BTreeSet<&'a str>,
     fs_roots: &'a [String],
     egress: &'a [(String, Vec<u16>)],
+    ignore_hosts: &'a [String],
 }
 
 fn host_known(ctx: &Ctx, hp: &str) -> bool {
     let Some((h, p)) = hp.rsplit_once(':') else {
         return false;
     };
+    if ctx
+        .ignore_hosts
+        .iter()
+        .any(|i| crate::diff_logs::host_matches(i, h))
+    {
+        return true;
+    }
     let p: u16 = p.parse().unwrap_or(443);
     ctx.egress
         .iter()

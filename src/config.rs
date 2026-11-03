@@ -99,6 +99,10 @@ pub struct LintConfig {
     /// Patterns are literal, not regexes.
     #[serde(default)]
     pub exclude: Vec<String>,
+    /// Hosts (exact, or `*.example.com`) that are never reported as unannotated network destinations, e.g. documentation
+    /// links in help text. Only for the tree-sitter engine. Use `@openshell ignore` for a single call site instead.
+    #[serde(default)]
+    pub ignore_hosts: Vec<String>,
     /// Call-site categories checked by the heuristics: any of "net", "fs", "env", "exec". Empty = all.
     /// Directive errors and policy sanity checks always run.
     #[serde(default)]
@@ -125,6 +129,7 @@ impl Default for LintConfig {
         LintConfig {
             window: 8,
             exclude: vec![],
+            ignore_hosts: vec![],
             categories: vec![],
             engine: engine(),
             fs_dynamic: fs_dynamic(),
