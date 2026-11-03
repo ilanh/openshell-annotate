@@ -222,6 +222,7 @@ fs_dynamic = "summary"     # fs writes with computed paths: summary (one repo-le
 window = 8                 # lines a directive covers below it
 exclude = []               # lint-only extras; [scan].exclude already applies to lint. "^prefix/" anchors at the repo root;
                            # anything else is a substring of "/<relative path>" (literal, not a regex)
+ignore_hosts = []          # hosts (exact or "*.example.com") never reported as unannotated destinations, e.g. doc links ("treesitter" engine)
 categories = []            # restrict call-site heuristics to any of "net", "fs", "env", "exec" (empty = all)
 [scan]
 exclude = []               # same pattern syntax (literal, NOT a regex); hides files from scan, generate, drift and lint alike.
@@ -269,6 +270,10 @@ the rule; a profile bound to other binaries (the bundled `github` profile is for
   (`SetEnvPrefix("github")` + `GetString("personal_access_token")`), a Python library such as litellm picking the variable
   by model name. Nothing static can resolve them. Declare the credential once, either with `@openshell provider ENV` next to
   the code or, when there is no good place for a comment, with `[providers] expect = ["ENV"]` in `openshell-annotate.toml`.
+- URL literals are not reported (info[net]) when they sit in a docstring or bare string statement, in a `raise`/`throw`, in
+  an argument of a print/log/echo/error-constructing call or `add_argument`, or in a variable or keyword named like text for
+  people (`help`, `usage`, `msg`, `message`, `error`, `doc`, ...). Real calls are still flagged. A host that still shows up can be
+  listed in `[lint] ignore_hosts`.
 - JS regex literals are not parsed; Python docstrings are strings (directives must be `#` comments).
 - Filesystem/process/landlock are startup-only in OpenShell; drift labels them `startup`.
 - `diff-logs` only sees network and L7 events: OpenShell 0.1.6 does not log Landlock/filesystem denials (upstream #4270), log

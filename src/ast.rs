@@ -289,6 +289,118 @@ pub fn comments(lang: Language, rel: &str, text: &str) -> Option<Vec<crate::lexe
     Some(out)
 }
 
+/// Callees whose string arguments are text for people (log lines, user messages, error text, CLI help), not destinations.
+fn message_callee(name: &str) -> bool {
+    let last = name.rsplit(['.', ':']).next().unwrap_or(name);
+    matches!(
+        name,
+        "print" | "echo" | "printf" | "puts" | "println" | "errors.New" | "fmt.Errorf"
+    ) || matches!(
+        last,
+        "print"
+            | "debug"
+            | "info"
+            | "warn"
+            | "warning"
+            | "error"
+            | "exception"
+            | "critical"
+            | "fatal"
+            | "trace"
+            | "log"
+            | "logf"
+            | "Printf"
+            | "Println"
+            | "Print"
+            | "Fprintf"
+            | "Fprintln"
+            | "Errorf"
+            | "Fatalf"
+            | "Fatal"
+            | "Panicf"
+            | "add_argument"
+            | "add_parser"
+            | "ArgumentParser"
+            | "echo"
+            | "secho"
+            | "print_help"
+    ) || last.ends_with("Error")
+        || last.ends_with("Exception")
+        || last.ends_with("Warning")
+}
+
+/// Variable names that hold text for people.
+const MESSAGE_NAMES: &[&str] = &[
+    "help", "usage", "descr", "doc", "epilog", "message", "msg", "error", "err", "warn", "banner",
+    "notice",
+];
+
+/// True when the string literal is a docstring or bare string statement, part of a `raise`/`throw`, or an argument of a
+/// logging / printing / error-constructing / argument-help call, e.g. `raise ValueError("see https://docs.x.io")`.
+fn message_context(n: Node, src: &str) -> bool {
+    let mut cur = n.parent();
+    let mut hops = 0;
+    while let Some(p) = cur {
+        hops += 1;
+        if hops > 8 {
+            return false;
+        }
+        match p.kind() {
+            "expression_statement" => {
+                // a bare string statement: a docstring (Python) or a no-op
+                return p.named_child_count() == 1
+                    && p.named_child(0).is_some_and(|c| c.id() == n.id());
+            }
+            "raise_statement" | "throw_statement" => return true,
+            "call" | "call_expression" | "new_expression" | "command" => {
+                let callee = p
+                    .child_by_field_name("function")
+                    .or_else(|| p.child_by_field_name("constructor"))
+                    .or_else(|| p.child_by_field_name("name"))
+                    .map(|c| txt(c, src).trim().to_string())
+                    .unwrap_or_default();
+                return message_callee(&callee);
+            }
+            "assignment"
+            | "variable_declarator"
+            | "short_var_declaration"
+            | "const_spec"
+            | "var_spec" => {
+                // `_HELP_TEXT = """..."""`, `msg = (...)`, `const usage = "..."`: named for people, not for a connection
+                let name = ["left", "name"]
+                    .iter()
+                    .find_map(|f| p.child_by_field_name(f))
+                    .map(|c| txt(c, src).to_ascii_lowercase())
+                    .unwrap_or_default();
+                return MESSAGE_NAMES.iter().any(|k| name.contains(k));
+            }
+            "keyword_argument" => {
+                let name = p
+                    .child_by_field_name("name")
+                    .map(|c| txt(c, src).to_ascii_lowercase())
+                    .unwrap_or_default();
+                if matches!(
+                    name.as_str(),
+                    "help"
+                        | "description"
+                        | "epilog"
+                        | "usage"
+                        | "message"
+                        | "msg"
+                        | "title"
+                        | "label"
+                ) {
+                    return true;
+                }
+            }
+            "pair" | "dictionary" => return false,
+            _ => {}
+        }
+        cur = p.parent();
+    }
+    false
+}
+
 fn url_literal(n: Node, src: &str, out: &mut Vec<Site>) {
     let k = n.kind();
     if !(STRING_KINDS.contains(&k) || k == "word") {
@@ -296,6 +408,9 @@ fn url_literal(n: Node, src: &str, out: &mut Vec<Site>) {
     }
     let t = txt(n, src);
     if !t.contains("://") || t.len() > 600 {
+        return;
+    }
+    if message_context(n, src) {
         return;
     }
     let hosts = crate::lint::url_hosts(t);
