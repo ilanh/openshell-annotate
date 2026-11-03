@@ -39,7 +39,7 @@ GitHub issues are how we track all work: bugs, features and follow-ups.
 
 - Open an issue first for anything beyond a small fix, so we agree on the direction (see Issues above).
 - Add a test for every new directive, attribute, lint pattern or error message (`tests/cli.rs`; fixtures in
-  `tests/fixtures/`). If generated output changes, review `tests/fixtures/sample/policy.expected.yaml` by hand.
+  `tests/fixtures/`). If generated output changes, review `tests/fixtures/sample/policy.expected.yaml` by hand (its header carries `@VERSION@`, which the tests replace with the crate version).
 - Never emit a field that the pinned `openshell-policy-schema` rejects.
 - No secrets in code, fixtures or test output.
 
