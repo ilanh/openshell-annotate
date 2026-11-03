@@ -208,6 +208,8 @@ system_paths = "auto"     # auto: add /usr /lib /etc /proc /dev/urandom (ro) and
                           # always | never
 [providers]
 profiles_dir = "/path/to/OpenShell/providers"
+                          # profiles outside the repo: the generated providers.sh uses ${OPENSHELL_PROFILES_DIR:-<that dir>}/<file>,
+                          # so it keeps working after the repo or the OpenShell checkout moves
 [providers.env]           # env var -> profile id overrides
 [providers]
 expect = []               # credentials read through dynamic lookups no scan can see, e.g. ["GITHUB_PERSONAL_ACCESS_TOKEN"]; each is treated

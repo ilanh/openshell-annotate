@@ -64,7 +64,7 @@ Attributes:
 | `deny` | `METHOD:/path` | yes | Request subtracted from what is allowed. Repeatable; needs `allow` or `access`. |
 | `bin` | `/absolute/real/path` | no | Binary that opens the connection. Overrides the nearest `@openshell bin` and `[languages]` in the config. |
 | `rule` | `[A-Za-z0-9_-]+` | no | Name of the `network_policies` entry (default: slug of the host). Must not start with `_provider_`. |
-| `tls` | `skip` | no | Relay without TLS termination. Cannot be combined with request inspection. |
+| `tls` | `skip` | no | Relay without TLS termination. Cannot be combined with request inspection. Use it for clients that do not trust the OpenShell CA. `openshell-prover check` reported such policies as `unsupported` with OpenShell 0.1.6 (tracked in #19). |
 
 `reason` is required.
 

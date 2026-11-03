@@ -69,7 +69,7 @@ pub const VERBS: &[VerbSpec] = &[
             AttrSpec { name: "deny", multi: true, values: "METHOD:/path", help: "Request subtracted from what is allowed. Repeatable; needs `allow` or `access`." },
             AttrSpec { name: "bin", multi: false, values: "/absolute/real/path", help: "Binary that opens the connection. Overrides the nearest `@openshell bin` and `[languages]` in the config." },
             AttrSpec { name: "rule", multi: false, values: "[A-Za-z0-9_-]+", help: "Name of the `network_policies` entry (default: slug of the host). Must not start with `_provider_`." },
-            AttrSpec { name: "tls", multi: false, values: "skip", help: "Relay without TLS termination. Cannot be combined with request inspection." },
+            AttrSpec { name: "tls", multi: false, values: "skip", help: "Relay without TLS termination. Cannot be combined with request inspection. Use it for clients that do not trust the OpenShell CA. `openshell-prover check` reported such policies as `unsupported` with OpenShell 0.1.6 (tracked in #19)." },
         ],
         reason_required: true,
         covers: "net",
