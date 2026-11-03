@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in openshell-annotate does not work as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not include secrets or real API keys in logs or fixtures.
+        Security problems go to the private channel described in [SECURITY.md](https://github.com/ilanh/openshell-annotate/blob/main/SECURITY.md), not here.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [scan, generate, lint, drift, diff-logs, docs, providers, languages, other]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: openshell-annotate version
+      description: Output of `openshell-annotate --version` (or the commit).
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal files and the exact command lines.
+      placeholder: |
+        1. a.rb containing `# @openshell egress api.example.com:443 reason="r"`
+        2. `openshell-annotate scan .`
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Output, error messages, or the wrong policy.
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, OpenShell version (`openshell --version`), language and runtime of the scanned project.

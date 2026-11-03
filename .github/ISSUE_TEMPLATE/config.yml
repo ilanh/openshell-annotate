@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ilanh/openshell-annotate/blob/main/SECURITY.md
+    about: Please report security problems privately as described in SECURITY.md, not in a public issue.

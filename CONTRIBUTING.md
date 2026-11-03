@@ -22,9 +22,22 @@ required (0 approvals, conversations resolved), status checks `check` and `audit
 history, no force pushes, no deletion, and no bypass for admins. GitHub only enforces rulesets on private repositories
 with a paid plan; until then the rules are followed by convention.
 
+## Issues
+
+GitHub issues are how we track all work: bugs, features and follow-ups.
+
+1. Search existing issues first, then open one with the **Bug report** or **Feature request** form (blank issues are
+   disabled; security problems go through `SECURITY.md`, not an issue).
+2. Labels: `bug` or `enhancement`, plus an area (`scan`, `generate`, `lint`, `drift`, `diff-logs`, `providers`,
+   `languages`, `docs`). `upstream-openshell` marks behaviour of OpenShell itself that we only track locally;
+   `upstream-compat` is used by the weekly compatibility job. Create or refresh the labels with `scripts/labels.sh`.
+3. Work on a branch (see above) and put `Closes #<issue>` in the pull request description, one line per issue, so the
+   issue closes automatically when the PR is squash-merged. Use `Refs #<issue>` when the issue should stay open.
+4. Keep one pull request per issue, or a small group of closely related issues.
+
 ## Before you open a pull request
 
-- Open an issue first for anything beyond a small fix, so we agree on the direction.
+- Open an issue first for anything beyond a small fix, so we agree on the direction (see Issues above).
 - Add a test for every new directive, attribute, lint pattern or error message (`tests/cli.rs`; fixtures in
   `tests/fixtures/`). If generated output changes, review `tests/fixtures/sample/policy.expected.yaml` by hand.
 - Never emit a field that the pinned `openshell-policy-schema` rejects.
