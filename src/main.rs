@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
-use openshell_annotate::config::Config;
+use openshell_annotate::config::{Config, CONFIG_FILE};
 use openshell_annotate::directive::Directive;
 use openshell_annotate::drift;
 use openshell_annotate::generate::{self, miette_str};
@@ -188,23 +188,55 @@ fn load_profiles(cfg: &Config, cli_dir: Option<&Path>, root: &Path) -> Result<Ve
             p
         }
     };
-    let mut dirs: Vec<PathBuf> = Vec::new();
+    // Each directory remembers where it was named, so a missing one can point at the right place.
+    let mut dirs: Vec<(PathBuf, DirSource)> = Vec::new();
     match cli_dir {
-        Some(d) => dirs.push(d.to_path_buf()),
+        Some(d) => dirs.push((d.to_path_buf(), DirSource::Flag)),
         None => {
             if let Some(d) = cfg.providers.profiles_dir.as_deref() {
-                dirs.push(resolve(d));
+                dirs.push((resolve(d), DirSource::Config("profiles_dir")));
             }
         }
     }
     for d in &cfg.providers.profiles_dirs {
-        dirs.push(resolve(d));
+        dirs.push((resolve(d), DirSource::Config("profiles_dirs")));
     }
     let mut out = Vec::new();
-    for d in dirs {
+    for (d, source) in dirs {
+        // Only a missing directory gets the hint; every other failure keeps its own context.
+        if let Err(e) = std::fs::metadata(&d) {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                anyhow::bail!("{}", source.missing_message(&d));
+            }
+        }
         out.extend(providers::load_profiles(&d)?);
     }
     Ok(out)
+}
+
+/// Where a provider-profiles directory was named.
+#[derive(Clone, Copy)]
+enum DirSource {
+    /// `--profiles-dir`.
+    Flag,
+    /// A `[providers]` key in `openshell-annotate.toml`.
+    Config(&'static str),
+}
+
+impl DirSource {
+    /// One error line naming the source, then one hint line.
+    fn missing_message(self, dir: &Path) -> String {
+        match self {
+            DirSource::Flag => format!(
+                "profiles directory {} (from --profiles-dir) does not exist\nhint: create it, fix the --profiles-dir path, or clone OpenShell",
+                dir.display()
+            ),
+            DirSource::Config(key) => format!(
+                "profiles directory {} (from `[providers] {key}` in {CONFIG_FILE}) does not exist\nhint: create it, fix the path in {CONFIG_FILE}, or clone OpenShell",
+                dir.display()
+            ),
+        }
+    }
 }
 
 fn do_scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
