@@ -215,10 +215,12 @@ profiles_dirs = ["openshell/profiles"]   # extra directories of custom provider 
 engine = "treesitter"      # or "regex" (the original line heuristics)
 fs_dynamic = "summary"     # fs writes with computed paths: summary (one repo-level info) | info (per file) | warn | off
 window = 8                 # lines a directive covers below it
-exclude = []               # "^prefix/" anchors at the repo root; anything else is a substring of "/<relative path>"
+exclude = []               # lint-only extras; [scan].exclude already applies to lint. "^prefix/" anchors at the repo root;
+                           # anything else is a substring of "/<relative path>" (literal, not a regex)
 categories = []            # restrict call-site heuristics to any of "net", "fs", "env", "exec" (empty = all)
 [scan]
-exclude = []               # same pattern syntax as [lint].exclude
+exclude = []               # same pattern syntax (literal, NOT a regex); hides files from scan, generate, drift and lint alike.
+                           # list one entry per directory: ["^packages/cli/", "^packages/admin-mcp/"]. A pattern that matches no file warns.
 [scan.comment_leaders]     # extension -> "hash" (#) | "slash" (// and /* */) | "none"; extends/overrides the built-ins
 # rb = "hash"              # built in: rb rake gemspec pl pm r (hash); rs java kt kts cs php swift scala dart c h cc cpp hpp (slash)
 [languages]

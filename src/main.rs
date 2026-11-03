@@ -199,6 +199,9 @@ fn do_scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
     for n in s.unscanned_notes() {
         eprintln!("note: {n}");
     }
+    for d in &s.dead_excludes {
+        eprintln!("warning: {}", d.note());
+    }
     Ok(s)
 }
 
