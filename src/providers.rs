@@ -200,13 +200,15 @@ impl ProvidersOut {
         s.push_str("set -euo pipefail\n");
         s.push_str("ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"\n\n");
         let mut attach = String::new();
+        let mut uses_profiles_dir = false;
         for p in &self.providers {
             s.push_str(&format!("# {} <- {}\n", p.instance, p.sources.join(", ")));
             if let Some(f) = &p.profile_file {
                 let id = p.profile.as_deref().unwrap_or("");
+                let (word, outside) = root_relative(f, root);
+                uses_profiles_dir |= outside;
                 s.push_str(&format!(
-                    "openshell profile describe {id} >/dev/null 2>&1 || openshell profile import -f {} --global\n",
-                    root_relative(f, root)
+                    "openshell profile describe {id} >/dev/null 2>&1 || openshell profile import -f {word} --global\n",
                 ));
             }
             let ty = p.profile.as_deref().unwrap_or("");
@@ -235,6 +237,13 @@ impl ProvidersOut {
                 u.sources.join(", ")
             ));
         }
+        if uses_profiles_dir {
+            s = s.replacen(
+                "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"\n",
+                "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"\n# Provider profiles outside this repo are read from $OPENSHELL_PROFILES_DIR when it is set (e.g. <OpenShell checkout>/providers).\n",
+                1,
+            );
+        }
         s.push_str("# Attach at sandbox creation:\n");
         s.push_str(&format!(
             "#   openshell sandbox create{attach} --policy {} -- <command>\n",
@@ -254,21 +263,38 @@ fn sh_quote(s: &str) -> String {
     }
 }
 
-/// `"$ROOT/<path relative to the repo root>"` so the committed script has no machine-specific paths.
-fn root_relative(f: &Path, root: &Path) -> String {
+/// Shell word for a profile file. Inside the repo: `"$ROOT/<path relative to the repo root>"`, so a committed script has no
+/// machine-specific paths. Outside the repo (an OpenShell checkout next to it, an absolute path): the directory can be
+/// overridden with `OPENSHELL_PROFILES_DIR`, so the script keeps working when the repo or the checkout moves.
+/// The bool says whether the override is used.
+fn root_relative(f: &Path, root: &Path) -> (String, bool) {
+    let esc = |s: &str| -> String {
+        s.chars()
+            .flat_map(|c| match c {
+                '"' | '$' | '`' | '\\' => vec!['\\', c],
+                _ => vec![c],
+            })
+            .collect()
+    };
     let full = f.display().to_string();
     let base = root.display().to_string();
-    match full.strip_prefix(&base) {
-        Some(rest) if rest.starts_with('/') => {
-            let esc: String = rest
-                .chars()
-                .flat_map(|c| match c {
-                    '"' | '$' | '`' | '\\' => vec!['\\', c],
-                    _ => vec![c],
-                })
-                .collect();
-            format!("\"$ROOT{esc}\"")
-        }
-        _ => sh_quote(&full),
+    let inside = match full.strip_prefix(&base) {
+        Some(rest) if rest.starts_with('/') && !rest.starts_with("/../") => Some(rest.to_string()),
+        _ => None,
+    };
+    if let Some(rest) = inside {
+        return (format!("\"$ROOT{}\"", esc(&rest)), false);
     }
+    let (dir, name) = match full.rsplit_once('/') {
+        Some((d, n)) => (d.to_string(), n.to_string()),
+        None => (String::new(), full.clone()),
+    };
+    let dir = match dir.strip_prefix(&base) {
+        Some(rest) => format!("$ROOT{}", esc(rest)),
+        None => esc(&dir),
+    };
+    (
+        format!("\"${{OPENSHELL_PROFILES_DIR:-{dir}}}/{}\"", esc(&name)),
+        true,
+    )
 }
