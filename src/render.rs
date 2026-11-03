@@ -409,6 +409,13 @@ pub fn diff_logs_human(
             "🔒",
         ),
         (
+            "tls_failure",
+            "tls failure",
+            Severity::Warning,
+            "Allowed, then failed (TLS)",
+            "🔐",
+        ),
+        (
             "manual",
             "manual review",
             Severity::Info,
