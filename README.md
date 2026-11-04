@@ -39,6 +39,8 @@ const r = await fetch("https://api.openai.com/v1/chat/completions", { ... });
 # @openshell fs write /workspace/data reason="result cache"
 ```
 
+[`examples/polyglot`](examples/polyglot) is a sample project annotated in every language the scanner reads (plus a sidecar for the comment styles it does not). The stubs do not need to run. `openshell-annotate scan` there lists each directive with its `file:line`.
+
 ## Commands
 
 | Command | What it does |
