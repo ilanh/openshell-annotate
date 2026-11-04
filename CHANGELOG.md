@@ -5,6 +5,18 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+## [0.1.0-rc.2] - 2026-11-04
+
+Merged pull requests since v0.1.0-rc.1:
+
+- fix(drift): label strict unmanaged sections by section, network_middlewares is live (#48)
+- docs: rustdoc for modules, functions and types in src/ (#46)
+- fix(generate): join endpoints of one host whose port lists overlap (#42)
+- fix(scan): match the not-scanned note to the language comment style (#44)
+- fix(scan): show process user/group and ignore kind= after the verb (#43)
+- docs(examples): add polyglot sample project (#41)
+- fix(providers): name the source of a missing profiles directory and hint how to fix it (#36)
+
 ## [0.1.0-rc.1] - 2026-11-03
 
 Merged pull requests:
