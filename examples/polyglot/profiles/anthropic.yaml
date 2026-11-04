@@ -1,0 +1,6 @@
+id: anthropic
+display_name: Anthropic
+credentials:
+  - name: api_key
+    env_vars: [ANTHROPIC_API_KEY]
+    required: true

@@ -1,0 +1,63 @@
+# Illustrative sandbox image. Paths are the real executables inside the image
+# (OpenShell does not follow symlinks), not paths on the host.
+# First-class languages use the family name. Every other language uses the file extension.
+
+[languages]
+javascript = "/usr/local/bin/node"
+python = "/usr/bin/python3"
+go = "/opt/desk/server"
+shell = "/bin/bash"
+
+rb = "/usr/bin/ruby"
+rake = "/usr/bin/ruby"
+gemspec = "/usr/bin/ruby"
+pl = "/usr/bin/perl"
+pm = "/usr/bin/perl"
+r = "/usr/bin/Rscript"
+rs = "/opt/desk/rust-worker"
+java = "/usr/bin/java"
+kt = "/usr/bin/java"
+kts = "/usr/bin/java"
+cs = "/usr/bin/dotnet"
+php = "/usr/bin/php"
+swift = "/opt/desk/swift-tool"
+scala = "/usr/bin/java"
+dart = "/usr/bin/dart"
+c = "/opt/desk/c-tool"
+cc = "/opt/desk/c-tool"
+cpp = "/opt/desk/cpp-tool"
+
+# Extensions turned on in [scan.comment_leaders] below.
+ex = "/usr/bin/elixir"
+exs = "/usr/bin/elixir"
+jl = "/usr/bin/julia"
+nim = "/usr/bin/nim"
+cr = "/usr/bin/crystal"
+zig = "/opt/desk/zig-tool"
+groovy = "/usr/bin/groovy"
+fs = "/usr/bin/dotnet"
+v = "/opt/desk/v-tool"
+sol = "/opt/desk/solc"
+tf = "/usr/bin/terraform"
+
+[policy]
+include_workdir = true
+enforcement = "enforce"
+
+[providers]
+profiles_dir = "profiles"
+
+# Languages whose comments are `#` or `//` but which have no built-in leader.
+# `none` would switch a built-in extension off.
+[scan.comment_leaders]
+ex = "hash"
+exs = "hash"
+jl = "hash"
+nim = "hash"
+cr = "hash"
+zig = "slash"
+groovy = "slash"
+fs = "slash"
+v = "slash"
+sol = "slash"
+tf = "hash"

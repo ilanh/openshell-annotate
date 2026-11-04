@@ -1,0 +1,6 @@
+id: github
+display_name: GitHub
+credentials:
+  - name: token
+    env_vars: [GITHUB_TOKEN]
+    required: true
