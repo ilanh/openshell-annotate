@@ -308,6 +308,36 @@ fn drift_unmanaged_sections_noted_and_strict_flags_them() {
 }
 
 #[test]
+fn drift_strict_labels_network_middlewares_live_and_landlock_startup() {
+    let t = fixture();
+    assert!(run(t.path(), &["generate", "-o", "policy.yaml"])
+        .status
+        .success());
+    let mut y = std::fs::read_to_string(t.path().join("policy.yaml"))
+        .unwrap()
+        .replace(
+            "version: 1\n",
+            "version: 1\nlandlock:\n  compatibility: hard_requirement\n",
+        );
+    y.push_str(
+        "network_middlewares:\n  redact:\n    name: redact\n    middleware: openshell/regex\n    order: 10\n    \
+         config: {}\n    on_error: fail_closed\n    endpoints:\n      include: [\"api.openai.com\"]\n",
+    );
+    std::fs::write(t.path().join("policy.yaml"), y).unwrap();
+    let o = run(t.path(), &["drift", "--policy", "policy.yaml", "--strict"]);
+    assert_eq!(o.status.code(), Some(1), "{}{}", out(&o), err(&o));
+    let s = out(&o);
+    let line = |section: &str| {
+        s.lines()
+            .find(|l| l.contains(&format!("] {section} ")))
+            .unwrap_or_else(|| panic!("no finding for {section}: {s}"))
+            .to_string()
+    };
+    assert!(line("landlock").contains("[startup]"), "{s}");
+    assert!(line("network_middlewares").contains("[live]"), "{s}");
+}
+
+#[test]
 fn generate_rejects_invalid_directives_with_locations() {
     let t = fixture();
     std::fs::write(

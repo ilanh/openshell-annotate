@@ -200,18 +200,23 @@ pub fn compare(generated: &PolicyDocument, committed: &PolicyDocument, strict: b
             r.findings.push(Finding {
                 change: Change::Extra,
                 section: s.clone(),
-                item: s,
+                item: s.clone(),
                 detail: "present in committed policy; directives cannot express it (--strict)"
                     .into(),
-                applies: if r.unmanaged.is_empty() {
-                    "startup"
-                } else {
-                    "live"
-                },
+                applies: unmanaged_applies(&s),
             });
         }
     }
     r
+}
+
+/// When a change to an unmanaged section takes effect: `network_middlewares` is a dynamic field (updated on a running
+/// sandbox like `network_policies`); `landlock` and anything else is fixed at sandbox creation.
+fn unmanaged_applies(section: &str) -> &'static str {
+    match section {
+        "network_middlewares" => "live",
+        _ => "startup",
+    }
 }
 
 /// Compares the generated providers output with a committed providers JSON file.
