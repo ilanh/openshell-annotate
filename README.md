@@ -284,7 +284,9 @@ the rule; a profile bound to other binaries (the bundled `github` profile is for
 - Languages: JS/TS, Python, Go and shell are first-class (string-aware lexing and lint call-site detection). Ruby, Rust,
   Java, Kotlin, C#, PHP, Swift, Scala, Dart, C/C++ and a few more are read for `@openshell` comments only (generic `#` or `//`
   lexer, no call-site lint). Map more extensions with `[scan.comment_leaders]`. Files in other known source languages (for
-  example `.lua`, `.ex`, `.hs`) are counted and reported on stderr as `note: N .ext files were not scanned`. When you
+  example `.lua`, `.ex`, `.hs`) are counted and reported on stderr as `note: N .ext files were not scanned`. The note says what to do: for languages
+  whose comments are `#` or `//` (Elixir, Julia, Zig, ...) it names the `[scan.comment_leaders]` setting; for `--`, `%`, `;`,
+  `(* *)` or `'` comments (Lua, Haskell, Erlang, Clojure, OCaml, Visual Basic) it points at a sidecar file. When you
   cannot or do not want to edit the source, keep the directives in a sidecar `.sh` file (comments only); it is scanned like any
   other shell file. A first-class sidecar annotations file is tracked in #20.
 - Dynamic environment lookups are invisible to lint and provider detection: Ruby `ENV[key.to_s.upcase]`, Go viper
