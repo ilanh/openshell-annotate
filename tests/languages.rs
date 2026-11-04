@@ -96,7 +96,15 @@ fn unscanned_languages_are_reported_and_bad_leader_is_an_error() {
     assert!(o.status.success(), "{}", err(&o));
     let e = err(&o);
     assert!(e.contains("note: 3 .lua files were not scanned"), "{e}");
-    assert!(e.contains("[scan.comment_leaders] lua"), "{e}");
+    assert!(
+        e.contains("its comments start with `--`, which this tool does not read"),
+        "{e}"
+    );
+    assert!(e.contains("sidecar shell file"), "{e}");
+    assert!(
+        !e.contains("comment_leaders] lua"),
+        "no setting that cannot help: {e}"
+    );
     // stdout stays machine-readable
     let j = run(t.path(), &["scan", "--json"]);
     serde_json::from_str::<serde_json::Value>(&out(&j)).unwrap();
@@ -112,5 +120,53 @@ fn unscanned_languages_are_reported_and_bad_leader_is_an_error() {
         err(&o).contains("must be `hash`, `slash` or `none`"),
         "{}",
         err(&o)
+    );
+}
+
+#[test]
+fn not_scanned_note_matches_the_comment_style() {
+    let t = tempfile::tempdir().unwrap();
+    for f in [
+        "a.lua", "b.hs", "c.erl", "d.clj", "e.ml", "f.vb", "g.ex", "h.zig",
+    ] {
+        write(t.path(), f, "x\n");
+    }
+    let o = run(t.path(), &["scan", "--format", "compact"]);
+    assert!(o.status.success(), "{}", err(&o));
+    let e = err(&o);
+    let note = |ext: &str| {
+        e.lines()
+            .find(|l| l.contains(&format!(" .{ext} file")))
+            .unwrap_or_else(|| panic!("no note for .{ext}: {e}"))
+            .to_string()
+    };
+    for (ext, leader) in [
+        ("lua", "`--`"),
+        ("hs", "`--`"),
+        ("erl", "`%`"),
+        ("clj", "`;`"),
+        ("ml", "`(* *)`"),
+        ("vb", "`'`"),
+    ] {
+        let n = note(ext);
+        assert!(
+            n.contains(&format!(
+                "its comments start with {leader}, which this tool does not read"
+            )),
+            "{n}"
+        );
+        assert!(n.contains("sidecar shell file"), "{n}");
+        assert!(!n.contains("comment_leaders"), "{n}");
+    }
+    assert!(
+        note("ex")
+            .contains("its comments start with `#`, so set `[scan.comment_leaders] ex = \"hash\"`"),
+        "{e}"
+    );
+    assert!(
+        note("zig").contains(
+            "its comments start with `//`, so set `[scan.comment_leaders] zig = \"slash\"`"
+        ),
+        "{e}"
     );
 }

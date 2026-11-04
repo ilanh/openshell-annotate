@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "providers": [
+    {
+      "instance": "anthropic",
+      "profile": "anthropic",
+      "credentials": [
+        "ANTHROPIC_API_KEY"
+      ],
+      "sources": [
+        "src/tsx/panel.tsx:2"
+      ],
+      "profile_endpoints": []
+    },
+    {
+      "instance": "github",
+      "profile": "github",
+      "credentials": [
+        "GITHUB_TOKEN"
+      ],
+      "sources": [
+        "src/js/github.js:2"
+      ],
+      "profile_endpoints": []
+    },
+    {
+      "instance": "openai-chat",
+      "profile": "openai",
+      "credentials": [
+        "OPENAI_API_KEY"
+      ],
+      "sources": [
+        "src/ts/chat.ts:2"
+      ],
+      "profile_endpoints": []
+    }
+  ],
+  "unmapped": []
+}

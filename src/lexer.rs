@@ -57,6 +57,29 @@ pub const KNOWN_UNSCANNED: &[&str] = &[
     "cr", "v", "sol", "tf",
 ];
 
+/// Line-comment style of the `KNOWN_UNSCANNED` extensions, so the "not scanned" note can give advice that works:
+/// `hash` / `slash` can be switched on with `[scan.comment_leaders]`; anything else is a leader this tool cannot read.
+pub const UNSCANNED_COMMENT_STYLE: &[(&str, &str)] = &[
+    ("ex", "hash"),
+    ("exs", "hash"),
+    ("jl", "hash"),
+    ("nim", "hash"),
+    ("cr", "hash"),
+    ("tf", "hash"),
+    ("zig", "slash"),
+    ("groovy", "slash"),
+    ("fs", "slash"),
+    ("v", "slash"),
+    ("sol", "slash"),
+    ("lua", "--"),
+    ("hs", "--"),
+    ("erl", "%"),
+    ("ml", "(* *)"),
+    ("clj", ";"),
+    ("cljs", ";"),
+    ("vb", "'"),
+];
+
 impl Language {
     /// Language of a file, honouring `[scan.comment_leaders]` (extension -> `hash` | `slash` | `none`).
     /// First-class languages always win; `none` switches a built-in default off.
