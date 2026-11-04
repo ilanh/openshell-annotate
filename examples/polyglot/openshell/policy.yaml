@@ -50,11 +50,6 @@ network_policies:
   api_nuget_org:
     endpoints:
       # NuGet from F# (src/fsharp/Packages.fs:1)
-      - host: "api.nuget.org"
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        access: read-only
       # NuGet v3 (src/csharp/NuGet.cs:1)
       - host: "api.nuget.org"
         ports: [443, 8443]

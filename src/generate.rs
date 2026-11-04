@@ -138,6 +138,71 @@ fn mergeable(a: &Spec, b: &Spec) -> bool {
         && (!b.allow.is_empty() || !b.deny.is_empty())
 }
 
+/// Joins endpoints of one host whose port lists overlap (`api.nuget.org:443` and `api.nuget.org:443,8443`) into
+/// one endpoint with the union of the ports, so a host:port is never listed twice. Settings must agree (allow/deny
+/// lists that can be unioned count as agreeing); otherwise it is the same conflict as two directives on one port.
+fn merge_overlapping_ports(rkey: &str, acc: &mut RuleAcc, errors: &mut Vec<String>) {
+    loop {
+        let keys: Vec<(String, Vec<u16>)> = acc.eps.keys().cloned().collect();
+        let mut pair = None;
+        'outer: for (i, a) in keys.iter().enumerate() {
+            for b in &keys[i + 1..] {
+                if a.0 == b.0 && a.1.iter().any(|p| b.1.contains(p)) {
+                    pair = Some((a.clone(), b.clone()));
+                    break 'outer;
+                }
+            }
+        }
+        let Some((ka, kb)) = pair else {
+            return;
+        };
+        let a = acc.eps.remove(&ka).expect("key listed above");
+        let b = acc.eps.remove(&kb).expect("key listed above");
+        if a.spec != b.spec && !mergeable(&a.spec, &b.spec) {
+            let shared: Vec<String> =
+                ka.1.iter()
+                    .filter(|p| kb.1.contains(p))
+                    .map(u16::to_string)
+                    .collect();
+            errors.push(format!(
+                "{}: conflicting settings for {}:{} in rule `{rkey}` (first declared at {}); make the directives agree or split them with rule=",
+                b.spec_origin,
+                ka.0,
+                shared.join(","),
+                a.spec_origin
+            ));
+            acc.eps.insert(ka, a);
+            acc.eps.insert(kb, b);
+            return;
+        }
+        let mut ports = ka.1;
+        ports.extend(kb.1);
+        ports.sort_unstable();
+        ports.dedup();
+        let mut spec = a.spec;
+        for r in b.spec.allow {
+            if !spec.allow.contains(&r) {
+                spec.allow.push(r);
+            }
+        }
+        for r in b.spec.deny {
+            if !spec.deny.contains(&r) {
+                spec.deny.push(r);
+            }
+        }
+        let mut sources = a.sources;
+        sources.extend(b.sources);
+        acc.eps.insert(
+            (ka.0, ports),
+            Ep {
+                spec,
+                spec_origin: a.spec_origin,
+                sources,
+            },
+        );
+    }
+}
+
 pub(crate) fn find_bin(
     d: &Directive,
     bins: &[&Directive],
@@ -329,6 +394,9 @@ pub fn generate(
         ep.sources
             .push((d.loc(), d.reason().unwrap_or("").to_string()));
         acc.bins.entry(bin).or_insert(origin);
+    }
+    for (rkey, acc) in rules.iter_mut() {
+        merge_overlapping_ports(rkey, acc, &mut errors);
     }
     for (s, hosts) in &slug_hosts {
         if hosts.len() > 1 {
