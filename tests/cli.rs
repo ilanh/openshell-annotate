@@ -79,6 +79,40 @@ fn scan_lists_directives_with_locations_and_ignores_strings() {
 }
 
 #[test]
+fn scan_shows_process_identity_and_ignore_kind() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(
+        t.path().join("a.js"),
+        "// @openshell process user=sandbox group=sandbox\n\
+         // @openshell process\n\
+         // @openshell ignore kind=net reason=\"runtime host\" scope=file\n\
+         fetch(x)\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["scan", "--format", "compact"]);
+    assert!(o.status.success(), "{}", err(&o));
+    let lines: Vec<String> = out(&o).lines().map(str::to_string).collect();
+    assert_eq!(
+        lines,
+        [
+            "a.js:1  process user=sandbox group=sandbox",
+            "a.js:2  process",
+            "a.js:3  ignore kind=net scope=file  # runtime host",
+        ],
+        "{}",
+        out(&o)
+    );
+    let o = run(t.path(), &["scan", "--color", "never"]);
+    assert!(o.status.success(), "{}", err(&o));
+    let s = out(&o);
+    assert!(s.contains("process user=sandbox group=sandbox\n"), "{s}");
+    assert!(
+        s.contains("ignore kind=net scope=file  # runtime host"),
+        "{s}"
+    );
+}
+
+#[test]
 fn scan_json() {
     let t = fixture();
     let o = run(t.path(), &["scan", "--json"]);

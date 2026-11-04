@@ -184,8 +184,17 @@ fn split_loc(loc: &str) -> Option<(&str, usize)> {
 
 // ---- scan ----------------------------------------------------------------------------------------------------------------
 
-fn directive_detail(k: &Kind) -> String {
-    match k {
+/// What a directive is about, after its verb: `host:ports`, the env var, the path, or for `process` and `ignore`
+/// the attributes that say what they do (`user=sandbox group=sandbox`, `kind=net scope=file`). Empty when there is
+/// nothing to show (a bare `process`).
+pub fn directive_detail(d: &Directive) -> String {
+    let attrs = |keys: &[&str]| {
+        keys.iter()
+            .filter_map(|k| d.attr(k).map(|v| format!("{k}={v}")))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    match &d.kind {
         Kind::Egress { host, ports } => format!(
             "{host}:{}",
             ports
@@ -197,7 +206,8 @@ fn directive_detail(k: &Kind) -> String {
         Kind::Provider { env } => env.clone(),
         Kind::Fs { path, .. } => path.clone(),
         Kind::Bin { path } => path.clone(),
-        _ => String::new(),
+        Kind::Process => attrs(&["user", "group"]),
+        Kind::Ignore => attrs(&["kind", "host", "scope"]),
     }
 }
 
@@ -239,7 +249,7 @@ pub fn scan_human(scan: &Scan, lines_of: LinesOf, style: Style) -> String {
                 category_sgr(cat),
                 &format!("{}{}", icon_prefix(style, cat), d.kind.name()),
             );
-            let det = directive_detail(&d.kind);
+            let det = directive_detail(d);
             if !det.is_empty() {
                 h.push(' ');
                 h.push_str(&style.paint("1", &det));
