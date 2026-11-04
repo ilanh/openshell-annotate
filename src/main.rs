@@ -324,22 +324,14 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 }
                 Format::Compact => {
                     for d in &s.directives {
-                        let detail = match &d.kind {
-                            openshell_annotate::directive::Kind::Egress { host, ports } => format!(
-                                "{host}:{}",
-                                ports
-                                    .iter()
-                                    .map(u16::to_string)
-                                    .collect::<Vec<_>>()
-                                    .join(",")
-                            ),
-                            openshell_annotate::directive::Kind::Provider { env } => env.clone(),
-                            openshell_annotate::directive::Kind::Fs { path, .. } => path.clone(),
-                            openshell_annotate::directive::Kind::Bin { path } => path.clone(),
-                            _ => String::new(),
+                        let detail = render::directive_detail(d);
+                        let detail = if detail.is_empty() {
+                            detail
+                        } else {
+                            format!(" {detail}")
                         };
                         let reason = d.reason().map(|r| format!("  # {r}")).unwrap_or_default();
-                        println!("{}:{}  {} {detail}{reason}", d.file, d.line, d.kind.name());
+                        println!("{}:{}  {}{detail}{reason}", d.file, d.line, d.kind.name());
                     }
                     eprintln!(
                         "{} directive(s) in {} file(s)",

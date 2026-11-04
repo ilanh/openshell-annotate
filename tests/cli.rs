@@ -79,6 +79,40 @@ fn scan_lists_directives_with_locations_and_ignores_strings() {
 }
 
 #[test]
+fn scan_shows_process_identity_and_ignore_kind() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(
+        t.path().join("a.js"),
+        "// @openshell process user=sandbox group=sandbox\n\
+         // @openshell process\n\
+         // @openshell ignore kind=net reason=\"runtime host\" scope=file\n\
+         fetch(x)\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["scan", "--format", "compact"]);
+    assert!(o.status.success(), "{}", err(&o));
+    let lines: Vec<String> = out(&o).lines().map(str::to_string).collect();
+    assert_eq!(
+        lines,
+        [
+            "a.js:1  process user=sandbox group=sandbox",
+            "a.js:2  process",
+            "a.js:3  ignore kind=net scope=file  # runtime host",
+        ],
+        "{}",
+        out(&o)
+    );
+    let o = run(t.path(), &["scan", "--color", "never"]);
+    assert!(o.status.success(), "{}", err(&o));
+    let s = out(&o);
+    assert!(s.contains("process user=sandbox group=sandbox\n"), "{s}");
+    assert!(
+        s.contains("ignore kind=net scope=file  # runtime host"),
+        "{s}"
+    );
+}
+
+#[test]
 fn scan_json() {
     let t = fixture();
     let o = run(t.path(), &["scan", "--json"]);
@@ -1748,4 +1782,59 @@ fn colour_flag_and_environment_apply_to_scan_diff_logs_and_generate() {
         let o = run_env(t.path(), args, &[("LANG", "en_US.UTF-8"), ("TERM", "dumb")]);
         assert!(text(&o).is_ascii(), "{args:?}");
     }
+}
+
+/// `examples/polyglot` ships its generated policy and providers file. Regenerating must give the same
+/// output (the header carries `@VERSION@` instead of the tool version), and `drift` must be clean.
+#[test]
+fn polyglot_example_regenerates_identically_and_has_no_drift() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/polyglot");
+    let t = tempfile::tempdir().unwrap();
+    copy_dir(&src, t.path());
+    let o = run(
+        t.path(),
+        &[
+            "generate",
+            "-o",
+            "new-policy.yaml",
+            "--providers-out",
+            "new-providers.json",
+        ],
+    );
+    assert!(o.status.success(), "{}", err(&o));
+    let committed = committed_policy(&src);
+    let fresh = std::fs::read_to_string(t.path().join("new-policy.yaml")).unwrap();
+    assert_eq!(
+        fresh, committed,
+        "examples/polyglot/openshell/policy.yaml is stale; regenerate it (see examples/polyglot/README.md)"
+    );
+    let committed = std::fs::read_to_string(src.join("openshell/providers.json")).unwrap();
+    let fresh = std::fs::read_to_string(t.path().join("new-providers.json")).unwrap();
+    assert_eq!(
+        fresh, committed,
+        "examples/polyglot/openshell/providers.json is stale"
+    );
+    std::fs::write(
+        t.path().join("openshell/policy.yaml"),
+        committed_policy(&src),
+    )
+    .unwrap();
+    let o = run(
+        t.path(),
+        &[
+            "drift",
+            "--policy",
+            "openshell/policy.yaml",
+            "--providers",
+            "openshell/providers.json",
+        ],
+    );
+    assert!(o.status.success(), "drift: {}{}", out(&o), err(&o));
+    assert!(out(&o).contains("no drift"), "{}", out(&o));
+}
+
+fn committed_policy(example: &Path) -> String {
+    std::fs::read_to_string(example.join("openshell/policy.yaml"))
+        .unwrap()
+        .replace("@VERSION@", env!("CARGO_PKG_VERSION"))
 }

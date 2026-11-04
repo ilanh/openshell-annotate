@@ -1,0 +1,6 @@
+id: openai
+display_name: OpenAI
+credentials:
+  - name: api_key
+    env_vars: [OPENAI_API_KEY]
+    required: true
