@@ -307,6 +307,52 @@ fn generate_requires_a_binary_when_unknown() {
 }
 
 #[test]
+fn overlapping_port_lists_for_one_host_become_one_endpoint() {
+    let t = fixture();
+    std::fs::write(
+        t.path().join("src/nuget.ts"),
+        "// @openshell egress api.nuget.test:443,8443 reason=\"NuGet v3\" access=read-only\n\
+         // @openshell egress api.nuget.test:443 reason=\"NuGet again\" access=read-only\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["generate", "-o", "p.yaml"]);
+    assert!(o.status.success(), "{}", err(&o));
+    let y = std::fs::read_to_string(t.path().join("p.yaml")).unwrap();
+    assert_eq!(
+        y.matches("- host: \"api.nuget.test\"").count(),
+        1,
+        "one endpoint for the host: {y}"
+    );
+    let at = y.find("- host: \"api.nuget.test\"").unwrap();
+    let ep = &y[at..];
+    let next = ep[1..].find("- host:").map_or(ep.len(), |i| i + 1);
+    let ep = &ep[..next];
+    assert!(ep.contains("ports: [443, 8443]"), "{ep}");
+    assert!(!ep.contains("port: 443\n"), "{ep}");
+    // both reasons stay above the merged endpoint
+    let before = &y[..at];
+    assert!(before.contains("NuGet v3 (src/nuget.ts:1)"), "{y}");
+    assert!(before.contains("NuGet again (src/nuget.ts:2)"), "{y}");
+}
+
+#[test]
+fn overlapping_port_lists_with_different_settings_conflict() {
+    let t = fixture();
+    std::fs::write(
+        t.path().join("src/dup.ts"),
+        "// @openshell egress dup.test:443,8443 reason=a access=read-only\n// @openshell egress dup.test:443 reason=b access=full\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["generate"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        err(&o).contains("conflicting settings for dup.test:443 "),
+        "{}",
+        err(&o)
+    );
+}
+
+#[test]
 fn conflicting_settings_and_slug_collisions_are_errors() {
     let t = fixture();
     std::fs::write(t.path().join("src/c1.ts"), "// @openshell egress dup.test:443 reason=a access=read-only\n// @openshell egress dup.test:443 reason=b access=full\n").unwrap();
