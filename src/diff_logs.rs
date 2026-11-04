@@ -15,6 +15,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
+/// Outcome of a logged connection or request.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
@@ -25,22 +26,32 @@ pub enum Action {
     Failed,
 }
 
+/// One sandbox network event parsed from a log line.
 #[derive(Debug, Clone, Serialize)]
 pub struct Event {
     pub action: Action,
     /// `net` (L4 connection) or `http` (L7 request).
     pub class: &'static str,
+    /// Absolute path of the process that connected, when the log names one.
     pub binary: Option<String>,
+    /// Destination host name (or IP when no name is logged).
     pub host: String,
     pub port: Option<u16>,
+    /// HTTP method (L7 events).
     pub method: Option<String>,
+    /// Request path without query or fragment (L7 events).
     pub path: Option<String>,
+    /// Name of the policy rule that decided, when logged (`-` counts as none).
     pub policy: Option<String>,
+    /// The log's reason or status detail.
     pub reason: Option<String>,
+    /// Log file name, or `<stdin>`.
     pub source: String,
+    /// 1-based line in [`Event::source`].
     pub line: usize,
 }
 
+/// Removes ANSI colour escape sequences.
 fn strip_ansi(s: &str) -> String {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new("\x1b\\[[0-9;]*m").unwrap())
@@ -48,18 +59,21 @@ fn strip_ansi(s: &str) -> String {
         .into_owned()
 }
 
+/// Matches a shorthand `NET:OPEN ... ALLOWED|DENIED bin(pid) -> host:port [policy:..] [reason:..]` line.
 fn net_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(r"NET:OPEN \[\w+\] (ALLOWED|DENIED) (\S+?)\((\d+)\) -> (\S+?):(\d+)(?: \[policy:(\S+?) engine:(\w+)\])?(?: \[reason:(.*?)\])?\s*$").unwrap()
     })
 }
+/// Matches a shorthand `NET:FAIL ... [bin(pid) -> ]host:port` line.
 fn fail_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(r"NET:FAIL \[\w+\] (?:(\S+?)\((\d+)\) -> )?(\S+?):(\d+)(?:\s|$)").unwrap()
     })
 }
+/// Matches a shorthand `HTTP:<METHOD> ... ALLOWED|DENIED METHOD http(s)://host[:port][/path] ...` line.
 fn http_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -67,6 +81,7 @@ fn http_re() -> &'static Regex {
     })
 }
 
+/// Returns [`Action::Allowed`] for `allowed` (any case), [`Action::Denied`] for anything else.
 fn action_of(s: &str) -> Action {
     if s.eq_ignore_ascii_case("allowed") {
         Action::Allowed
@@ -75,10 +90,16 @@ fn action_of(s: &str) -> Action {
     }
 }
 
+/// Cuts a URL path at its query string or fragment.
 fn strip_query(p: &str) -> String {
     p.split(['?', '#']).next().unwrap_or(p).to_string()
 }
 
+/// Converts one OCSF record into an [`Event`].
+///
+/// Only network activity (class 4001; activity 4 is a failure) and HTTP activity (class 4002) are used. Returns `None`
+/// for other classes, records without a destination host or an action, and the binary is dropped unless it is an
+/// absolute path.
 fn parse_json_line(v: &serde_json::Value, source: &str, line: usize) -> Option<Event> {
     let class_uid = v.get("class_uid")?.as_u64()?;
     if class_uid != 4001 && class_uid != 4002 {
@@ -138,6 +159,9 @@ fn parse_json_line(v: &serde_json::Value, source: &str, line: usize) -> Option<E
 }
 
 /// Parse a log file's text: OCSF JSON lines (also when prefixed, e.g. `OCSF-JSON {...}`) and shorthand lines.
+///
+/// ANSI colours are stripped first; lines that match neither format are ignored. An HTTP shorthand line without a
+/// port gets the scheme's default port.
 pub fn parse_logs(text: &str, source: &str) -> Vec<Event> {
     let mut out = Vec::new();
     for (i, raw) in text.lines().enumerate() {
@@ -211,14 +235,17 @@ pub fn parse_logs(text: &str, source: &str) -> Vec<Event> {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+/// An egress directive with its target and resolved binary, ready to match against events.
 #[derive(Debug, Clone)]
 pub struct Row {
     pub dir: Directive,
     pub host: String,
     pub ports: Vec<u16>,
+    /// The binary the directive resolves to (as for `generate`); `None` when it cannot be determined.
     pub bin: Option<String>,
 }
 
+/// Returns one [`Row`] per egress directive of the scan.
 pub fn rows(scan: &Scan, cfg: &Config) -> Vec<Row> {
     let bins: Vec<&Directive> = scan
         .directives
@@ -239,6 +266,8 @@ pub fn rows(scan: &Scan, cfg: &Config) -> Vec<Row> {
         .collect()
 }
 
+/// Returns whether `host` matches the directive host `pat`, case-insensitively; a leading `*` matches exactly one
+/// label.
 pub fn host_matches(pat: &str, host: &str) -> bool {
     let (p, h) = (pat.to_ascii_lowercase(), host.to_ascii_lowercase());
     if let Some(suffix) = p.strip_prefix('*') {
@@ -260,6 +289,7 @@ fn bin_matches(row_bin: &str, ev_bin: &str) -> bool {
     row_bin.ends_with("/git") && ev_bin.contains("/git-core/") && base.starts_with("git-")
 }
 
+/// Returns the `network_policies` key the row's directive generates (`rule=` or the host slug).
 fn row_rule_name(r: &Row) -> String {
     r.dir
         .attr("rule")
@@ -267,10 +297,13 @@ fn row_rule_name(r: &Row) -> String {
         .unwrap_or_else(|| crate::generate::slug(&r.host))
 }
 
+/// Returns whether the row's host matches and, when the event has a port, the row lists it.
 fn row_matches_target(r: &Row, host: &str, port: Option<u16>) -> bool {
     host_matches(&r.host, host) && port.is_none_or(|p| r.ports.contains(&p))
 }
 
+/// Returns why a denial can never be fixed by a directive (SSRF protection, loopback, link-local, cloud metadata,
+/// the OpenShell control plane), or `None` when it can.
 fn non_actionable(e: &Event) -> Option<&'static str> {
     let reason = e.reason.as_deref().unwrap_or("").to_ascii_lowercase();
     if reason.contains("ssrf") || reason.contains("always") || reason.contains("blocked address") {
@@ -291,6 +324,7 @@ fn non_actionable(e: &Event) -> Option<&'static str> {
     None
 }
 
+/// Something to change so the logged denials (or failures) stop.
 #[derive(Debug, Clone, Serialize)]
 pub struct Suggestion {
     /// `missing_egress` | `binary_mismatch` | `l7_allow` | `tls_failure` | `manual`
@@ -298,20 +332,27 @@ pub struct Suggestion {
     pub host: String,
     pub port: Option<u16>,
     pub binary: Option<String>,
+    /// Number of events behind the suggestion.
     pub count: usize,
     /// Directive text without the comment leader.
     pub directive: Option<String>,
+    /// `file:line` where the directive belongs: the directive it extends, or a source line that mentions the host.
     pub place: Option<String>,
+    /// Explanation for the user.
     pub note: String,
 }
 
+/// An egress directive that no event in the logs matched.
 #[derive(Debug, Clone, Serialize)]
 pub struct Stale {
+    /// `file:line` of the directive.
     pub directive: String,
+    /// `host:port[,port...]`.
     pub target: String,
     pub binary: Option<String>,
 }
 
+/// Denials no directive can fix, grouped by destination and reason.
 #[derive(Debug, Clone, Serialize)]
 pub struct NonActionable {
     pub host: String,
@@ -326,12 +367,16 @@ pub struct Declined {
     pub host: String,
     pub port: Option<u16>,
     pub count: usize,
+    /// `file:line` of the `ignore` directive.
     pub directive: String,
+    /// The `ignore` directive's reason.
     pub reason: String,
 }
 
+/// Result of [`analyze`].
 #[derive(Debug, Default, Serialize)]
 pub struct Report {
+    /// All parsed events.
     pub events: usize,
     pub denied: usize,
     pub allowed: usize,
@@ -368,6 +413,8 @@ fn allow_covers(rule: &str, method: &str, path: &str) -> bool {
     Regex::new(&re).is_ok_and(|r| r.is_match(path))
 }
 
+/// Returns the endpoint-setting attributes of a directive (`rule`, `access`, `protocol`, `enforce`, `tls`, `allow`,
+/// `deny`) as ` key=value` text, so a suggested directive for another binary keeps the same settings.
 fn spec_attrs(d: &Directive) -> String {
     let mut s = String::new();
     for k in ["rule", "access", "protocol", "enforce", "tls"] {
@@ -383,6 +430,8 @@ fn spec_attrs(d: &Directive) -> String {
     s
 }
 
+/// Returns the `file:line` of the first source line that mentions `host` outside a directive, preferring files that do
+/// not look like tests, fixtures or scripts. Files matching `[diff-logs].exclude` are skipped.
 fn find_mention(scan: &Scan, host: &str, cfg: &Config) -> Option<String> {
     let mut best: Option<String> = None;
     for src in &scan.sources {
@@ -475,6 +524,12 @@ fn tls_failures(events: &[Event], rows: &[Row], scan: &Scan, cfg: &Config, rep: 
     }
 }
 
+/// Matches the events against the egress directives of the scan.
+///
+/// Denials are grouped by binary, host and port. Those matching an `ignore host=` directive are declined, those no
+/// directive can fix are non-actionable; the rest become suggestions: a new egress when no directive covers the
+/// host:port, the same settings for another binary, `allow=` rules for L7 denials, or a manual note (e.g. when the
+/// deployed policy looks stale). Egress directives that no event matched are stale (only when there are events).
 pub fn analyze(events: &[Event], scan: &Scan, cfg: &Config) -> Report {
     let rows = rows(scan, cfg);
     let mut rep = Report {
@@ -705,6 +760,7 @@ pub fn analyze(events: &[Event], scan: &Scan, cfg: &Config) -> Report {
     rep
 }
 
+/// Returns the line-comment leader to write a directive in a file of this language.
 pub fn leader(lang: Language) -> &'static str {
     match lang {
         Language::Python | Language::Shell | Language::Hash => "#",
@@ -714,6 +770,13 @@ pub fn leader(lang: Language) -> &'static str {
 
 /// Insert the suggested directives above their placement line; suggestions without a place go to `observed_file`.
 /// Returns the list of files touched. `manual` suggestions are never written.
+///
+/// Inserted lines take the indentation of the line they go above and the comment leader of the file's language (`#`
+/// for files that were not scanned). Entries already present in `observed_file` are not added again.
+///
+/// # Errors
+///
+/// Fails when a target file cannot be read or written, or the directory of `observed_file` cannot be created.
 pub fn write_suggestions(
     rep: &Report,
     root: &std::path::Path,
@@ -796,6 +859,7 @@ pub fn write_suggestions(
     Ok(touched)
 }
 
+/// Renders the report in the stable compact text format (`--format compact`).
 pub fn render_text(rep: &Report) -> String {
     let mut s =
         format!(

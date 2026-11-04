@@ -30,6 +30,7 @@ pub fn category_icon(cat: &str) -> &'static str {
     }
 }
 
+/// Icon for a severity (`✖`, `⚠`, `ℹ`).
 pub fn severity_icon(s: Severity) -> &'static str {
     match s {
         Severity::Error => "✖",
@@ -38,6 +39,7 @@ pub fn severity_icon(s: Severity) -> &'static str {
     }
 }
 
+/// Lower-case name of a severity, as shown in finding headers.
 fn severity_word(s: Severity) -> &'static str {
     match s {
         Severity::Error => "error",
@@ -46,6 +48,7 @@ fn severity_word(s: Severity) -> &'static str {
     }
 }
 
+/// ANSI SGR parameters for a severity: bold red, yellow or cyan.
 pub(crate) fn severity_sgr(s: Severity) -> &'static str {
     match s {
         Severity::Error => "1;31",
@@ -57,6 +60,7 @@ pub(crate) fn severity_sgr(s: Severity) -> &'static str {
 /// `--color` value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorMode {
+    /// Decide from the terminal and the environment (see [`resolve_color`]).
     Auto,
     Always,
     Never,
@@ -99,6 +103,7 @@ pub fn resolve_icons(env: &dyn Fn(&str) -> Option<String>) -> bool {
 }
 
 impl Style {
+    /// Wraps `text` in the ANSI SGR sequence `sgr` when colour is on; empty text is never wrapped.
     pub fn paint(&self, sgr: &str, text: &str) -> String {
         if self.color && !text.is_empty() {
             format!("\x1b[{sgr}m{text}\x1b[0m")
@@ -106,19 +111,24 @@ impl Style {
             text.to_string()
         }
     }
+    /// Paints gutter text (line numbers, `|`, `-->`, `=`) bold blue.
     pub fn gutter(&self, text: &str) -> String {
         self.paint("1;34", text)
     }
 }
 
+/// Source lines shown above the finding's line.
 const CONTEXT_BEFORE: usize = 2;
+/// Source lines shown below the finding's line.
 const CONTEXT_AFTER: usize = 1;
+/// What a tab expands to in snippets.
 const TAB: &str = "    ";
 /// Visible width of a source line before it is windowed around the underline.
 const MAX_WIDTH: usize = 110;
 /// Longest underline; a call that spans many columns (or lines) is marked at its start.
 const MAX_UNDERLINE: usize = 48;
 
+/// Expands tabs to [`TAB`] and drops trailing whitespace.
 pub(crate) fn expand_tabs(s: &str) -> String {
     s.trim_end().replace('\t', TAB)
 }
@@ -140,6 +150,7 @@ fn cols(raw: &str, i: usize, j: usize) -> (usize, usize) {
     (w(&raw[..i]), w(&raw[i..j]))
 }
 
+/// Expands tabs to [`TAB`], keeping trailing whitespace (so column counts stay exact).
 fn expand_tabs_keep(s: &str) -> String {
     s.replace('\t', TAB)
 }
@@ -168,6 +179,8 @@ fn underline_range(f: &Finding, raw: &str) -> (usize, usize) {
     (lead, t.len().max(lead + 1))
 }
 
+/// Returns at most [`MAX_WIDTH`] characters of `text` starting at character `off`, with `ellipsis` marking a cut on
+/// either side; empty when the line ends before `off`.
 pub(crate) fn window(text: &str, off: usize, ellipsis: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     if off > 0 && chars.len() <= off {
@@ -186,12 +199,15 @@ pub(crate) fn window(text: &str, off: usize, ellipsis: &str) -> String {
     s
 }
 
+/// Number of decimal digits of `n` (at least 1), for the gutter width.
 pub(crate) fn digits(n: usize) -> usize {
     n.max(1).to_string().len()
 }
 
 /// Render `findings` (any order). `lines_of(file)` supplies the source lines for the snippet; a file it cannot supply
-/// (policy files, project-wide findings) is shown without one. `n_directives` / `n_files` feed the summary line.
+/// (policy files, project-wide findings) is shown without one. `n_directives` feeds the summary line.
+///
+/// Findings are grouped by file (project-wide ones, with file `.`, last) and sorted by line within a file.
 pub fn render(
     findings: &[Finding],
     lines_of: &dyn Fn(&str) -> Option<Vec<String>>,
@@ -240,6 +256,11 @@ pub fn render(
     out
 }
 
+/// Appends one finding: header, `-->` location (with column when a snippet is shown), the snippet with its
+/// underline and label, then `help` / `note` lines.
+///
+/// A line longer than [`MAX_WIDTH`] whose underline starts past column 60 is shifted left so the underline stays
+/// visible.
 fn render_one(
     out: &mut String,
     f: &Finding,
@@ -348,6 +369,7 @@ fn render_one(
     }
 }
 
+/// Formats `n` with the singular or plural noun (`1 file`, `2 files`).
 pub(crate) fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }

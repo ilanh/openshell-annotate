@@ -1,4 +1,7 @@
 //! Repository walk + directive extraction.
+//!
+//! [`scan`] walks the requested paths (honouring `.gitignore` and `[scan].exclude`), lexes every file in a known
+//! language and collects its directives, parse errors and lexed lines into a [`Scan`] that the other commands share.
 
 use crate::config::Config;
 use crate::directive::{extract, Directive, ParseError};
@@ -7,6 +10,7 @@ use anyhow::Result;
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 
+/// Directory names never descended into, wherever they appear.
 const SKIP_DIRS: &[&str] = &[
     "node_modules",
     "dist",
@@ -17,8 +21,10 @@ const SKIP_DIRS: &[&str] = &[
     ".next",
     ".turbo",
 ];
+/// Files larger than this (2 MiB) are not scanned.
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 
+/// One scanned source file.
 pub struct Source {
     /// Path relative to the scan root, `/` separated.
     pub rel: String,
@@ -26,10 +32,14 @@ pub struct Source {
     pub lexed: Lexed,
 }
 
+/// Everything a scan found, shared by `scan`, `generate`, `lint`, `drift` and `diff-logs`.
 #[derive(Default)]
 pub struct Scan {
+    /// Scanned files, sorted by relative path.
     pub sources: Vec<Source>,
+    /// Valid directives, in file and line order.
     pub directives: Vec<Directive>,
+    /// Comments that start with `@openshell` but do not parse.
     pub errors: Vec<ParseError>,
     /// Source files in languages with no known comment syntax, by extension (see `lexer::KNOWN_UNSCANNED`).
     pub unscanned: std::collections::BTreeMap<String, usize>,
@@ -68,6 +78,7 @@ impl Scan {
     }
 }
 
+/// An exclude pattern that matched no file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeadExclude {
     /// `scan` or `lint`.
@@ -82,6 +93,7 @@ impl DeadExclude {
         p.contains(['(', ')', '|', '[', ']', '+', '?', '*', '\\', '$'])
     }
 
+    /// Returns the warning for this pattern, with a hint that depends on whether it looks like a regex.
     pub fn note(&self) -> String {
         let hint = if self.looks_like_regex() {
             "exclude patterns are not regexes: `^prefix/` anchors at the repo root, anything else is a literal substring of `/<relative path>`; list one entry per directory"
@@ -95,6 +107,7 @@ impl DeadExclude {
     }
 }
 
+/// Returns `p` relative to `root`, `/` separated and without `.` components; a path outside `root` is kept whole.
 pub fn rel_path(root: &Path, p: &Path) -> String {
     let r = p.strip_prefix(root).unwrap_or(p);
     // `scan .` yields `./src/a.ts`; a leading `.` would break `^prefix` excludes and show up in policy comments
@@ -105,6 +118,16 @@ pub fn rel_path(root: &Path, p: &Path) -> String {
         .join("/")
 }
 
+/// Scans `paths` (the whole `root` when empty) and extracts the directives of every recognised source file.
+///
+/// Hidden files, `.gitignore`d files, `node_modules`/`dist`/`target`/... directories, files over 2 MiB, files matching `[scan].exclude` and files
+/// that are not valid UTF-8 are skipped. Files in a language without known comment syntax are counted in
+/// [`Scan::unscanned`]; dead exclude patterns are only reported for whole-repo scans. JavaScript comments come from
+/// the tree-sitter grammar when it parses the file, since the hand-written lexer does not know regex literals or JSX.
+///
+/// # Errors
+///
+/// Fails when the directory walk does, e.g. for a path that does not exist or cannot be read.
 pub fn scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
     let mut out = Scan::default();
     let roots: Vec<PathBuf> = if paths.is_empty() {

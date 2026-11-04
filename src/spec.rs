@@ -22,21 +22,29 @@ ignore    = "ignore" , { ws , attr } ;
 attr      = key , "=" , value ;
 value     = bare | '"' , { any - '"' | '\"' } , '"' ;"#;
 
+/// One attribute a directive accepts.
 pub struct AttrSpec {
+    /// Key as written before `=`.
     pub name: &'static str,
     /// Repeatable attribute (`allow`, `deny`); otherwise a duplicate is an error.
     pub multi: bool,
+    /// Human-readable description of the accepted values, shown in the docs table.
     pub values: &'static str,
+    /// Meaning of the attribute, shown in the docs table.
     pub help: &'static str,
 }
 
+/// One directive verb: its usage, arguments, attributes and documentation.
 pub struct VerbSpec {
+    /// Keyword after `@openshell`.
     pub verb: &'static str,
     /// Shown in `usage:` parse errors.
     pub usage: &'static str,
+    /// One-sentence description for the docs.
     pub summary: &'static str,
     /// Positional arguments: (name, description).
     pub args: &'static [(&'static str, &'static str)],
+    /// Verb-specific attributes; [`COMMON_ATTRS`] are accepted in addition.
     pub attrs: &'static [AttrSpec],
     /// Whether `reason="..."` is mandatory.
     pub reason_required: bool,
@@ -52,9 +60,12 @@ pub const COMMON_ATTRS: &[AttrSpec] = &[
     AttrSpec { name: "scope", multi: false, values: "file | next", help: "`file` makes the directive cover the whole file for lint; the default covers the call sites within `[lint] window` lines below it." },
 ];
 
+/// Values of `ignore kind=`, as listed in the docs.
 pub const IGNORE_KINDS: &[&str] = &["net", "fs", "env", "exec", "all"];
+/// Values of `egress access=`, as listed in the docs.
 pub const ACCESS_PRESETS: &[&str] = &["read-only", "read-write", "full"];
 
+/// Every directive verb, in documentation order.
 pub const VERBS: &[VerbSpec] = &[
     VerbSpec {
         verb: "egress",
@@ -136,10 +147,12 @@ pub const VERBS: &[VerbSpec] = &[
     },
 ];
 
+/// Returns the spec of the verb `name`, if it exists.
 pub fn verb(name: &str) -> Option<&'static VerbSpec> {
     VERBS.iter().find(|v| v.verb == name)
 }
 
+/// Returns all verb keywords joined with `, `, for error messages.
 pub fn verb_names() -> String {
     VERBS.iter().map(|v| v.verb).collect::<Vec<_>>().join(", ")
 }
@@ -206,6 +219,7 @@ pub fn directives_md() -> String {
     s
 }
 
+/// Appends a Markdown table of `attrs` to `s`, escaping `|` in the values column.
 fn attr_table(s: &mut String, attrs: &[AttrSpec]) {
     s.push_str("| Attribute | Values | Repeatable | Meaning |\n|---|---|---|---|\n");
     for a in attrs {

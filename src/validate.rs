@@ -9,10 +9,22 @@
 use crate::directive::{Directive, Kind};
 use openshell_policy_schema::PolicyDocument;
 
+/// Longest filesystem path OpenShell accepts, in bytes.
 pub const MAX_PATH_LEN: usize = 4096;
+/// Most paths a `filesystem_policy` may list (`read_only` and `read_write` together).
 pub const MAX_FS_PATHS: usize = 256;
+/// Values of `egress protocol=`.
 pub const PROTOCOLS: &[&str] = &["rest", "websocket", "graphql", "mcp", "json-rpc", "tcp"];
 
+/// Checks that `host` is a destination OpenShell can authorize.
+///
+/// Brackets around an IPv6 literal are ignored. Wildcards need at least three labels; `**` may only be the whole
+/// first label, and `*` may appear inside the first label or as a whole later label.
+///
+/// # Errors
+///
+/// Returns a message when the host is empty, loopback, link-local or unspecified, contains characters other than
+/// ASCII letters, digits, `.`, `-`, `_`, `*` and `:`, or breaks the wildcard rules.
 pub fn check_host(host: &str) -> Result<(), String> {
     let h = host.trim_matches(|c| c == '[' || c == ']');
     if h.is_empty() {
@@ -56,6 +68,12 @@ pub fn check_host(host: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Checks a `filesystem_policy` path; `write` is true for `read_write` entries.
+///
+/// # Errors
+///
+/// Returns a message when the path is not absolute, contains a `..` component, is longer than [`MAX_PATH_LEN`], or
+/// is the root `/` in a write entry.
 pub fn check_fs_path(path: &str, write: bool) -> Result<(), String> {
     if !path.starts_with('/') {
         return Err(format!("`{path}` must be an absolute path (OpenShell rejects relative filesystem paths; write the in-sandbox path)"));
@@ -72,6 +90,11 @@ pub fn check_fs_path(path: &str, write: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Checks a `run_as_user` / `run_as_group` value.
+///
+/// # Errors
+///
+/// Returns a message unless `v` is `sandbox` or a numeric id from 1 to 4294967294 (so root, `0`, is rejected).
 pub fn check_identity(v: &str) -> Result<(), String> {
     if v == "sandbox" {
         return Ok(());
@@ -84,6 +107,12 @@ pub fn check_identity(v: &str) -> Result<(), String> {
     }
 }
 
+/// Checks an `allow=` / `deny=` value (`what` names the attribute in the message).
+///
+/// # Errors
+///
+/// Returns a message unless `s` is `METHOD:path` with an upper-case (or `_`) method or `*`, and a path starting with
+/// `/` or `*`.
 fn check_allow(s: &str, what: &str) -> Result<(), String> {
     let Some((m, p)) = s.split_once(':') else {
         return Err(format!("{what}=\"{s}\": expected METHOD:/path"));

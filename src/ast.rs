@@ -9,6 +9,7 @@ use regex::Regex;
 use std::sync::OnceLock;
 use tree_sitter::{Node, Parser};
 
+/// What is statically known about the path a filesystem write targets.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Pth {
     /// Absolute path (or the absolute literal prefix of a computed path such as `` `/data/${id}` ``).
@@ -19,8 +20,10 @@ pub enum Pth {
     Dynamic,
 }
 
+/// A call site (or URL literal) that may need a policy entry.
 #[derive(Debug, Clone)]
 pub struct Site {
+    /// 1-based line of the node start.
     pub line: usize,
     /// 0-based byte column of the node start within its line.
     pub col: usize,
@@ -28,16 +31,19 @@ pub struct Site {
     pub end_col: Option<usize>,
     /// `net` | `fs` | `env` | `exec`
     pub cat: &'static str,
+    /// Short description of the call for messages, e.g. `fetch()` or `filesystem write (writeFile)`.
     pub what: String,
     /// Environment variable name (cat = env) when it is a literal.
     pub env: Option<String>,
     /// `host:port` pairs found in the URL-ish arguments (net).
     pub urls: Vec<String>,
+    /// Target of a filesystem write (cat = fs).
     pub path: Option<Pth>,
     /// true: a call; false: a bare URL literal.
     pub call: bool,
 }
 
+/// Returns the (cached) regex that recognises temp-directory expressions such as `os.tmpdir()` or `mktemp`.
 fn temp_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -46,14 +52,17 @@ fn temp_re() -> &'static Regex {
     })
 }
 
+/// Returns the source text of `n`; `src` must be the text the tree was parsed from.
 fn txt<'a>(n: Node, src: &'a str) -> &'a str {
     &src[n.byte_range()]
 }
 
+/// Returns the 1-based line where `n` starts.
 fn line_of(n: Node) -> usize {
     n.start_position().row + 1
 }
 
+/// Node kinds of string literals across the supported grammars.
 const STRING_KINDS: &[&str] = &[
     "string",
     "template_string",
@@ -61,6 +70,7 @@ const STRING_KINDS: &[&str] = &[
     "raw_string_literal",
     "raw_string",
 ];
+/// Node kinds of interpolations inside strings (JS `${}`, Python f-string `{}`, shell `$x` / `$(...)`).
 const SUBST_KINDS: &[&str] = &[
     "template_substitution",
     "interpolation",
@@ -69,6 +79,7 @@ const SUBST_KINDS: &[&str] = &[
     "command_substitution",
 ];
 
+/// Returns whether a string node has an interpolation among its direct children.
 fn has_subst(n: Node) -> bool {
     let mut c = n.walk();
     let r = n
@@ -77,6 +88,8 @@ fn has_subst(n: Node) -> bool {
     r
 }
 
+/// Removes Python string prefixes (`r`, `b`, `f`, `u` in any case) and one pair of surrounding quotes (`"""`, `'''`,
+/// `"`, `'` or `` ` ``); text without matching quotes is returned with only the prefixes removed.
 fn strip_quotes(t: &str) -> String {
     let t = t.trim_start_matches(['r', 'R', 'b', 'B', 'f', 'F', 'u', 'U']);
     for q in ["\"\"\"", "'''"] {
@@ -100,6 +113,7 @@ fn str_lit(n: Node, src: &str) -> Option<String> {
     }
 }
 
+/// Returns the named argument nodes of a call, without comments; empty when it has no `arguments` field.
 fn named_args<'t>(call: Node<'t>) -> Vec<Node<'t>> {
     let Some(a) = call.child_by_field_name("arguments") else {
         return vec![];
@@ -112,6 +126,7 @@ fn named_args<'t>(call: Node<'t>) -> Vec<Node<'t>> {
     v
 }
 
+/// Returns whether path `p` is `root` or inside it; the root `/` contains every path.
 fn under(p: &str, root: &str) -> bool {
     let r = root.trim_end_matches('/');
     p == r || p.starts_with(&format!("{r}/")) || r.is_empty()
@@ -152,6 +167,8 @@ fn classify_path(n: Node, src: &str) -> Pth {
     Pth::Dynamic
 }
 
+/// Returns whether a write to `p` is already allowed: temp paths, `/tmp`, `/dev/null`, or anything under one of the
+/// declared `fs write` roots. A dynamic path is never covered.
 pub fn is_covered_path(p: &Pth, fs_roots: &[String]) -> bool {
     match p {
         Pth::Temp => true,
@@ -164,6 +181,7 @@ pub fn is_covered_path(p: &Pth, fs_roots: &[String]) -> bool {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+/// Appends a call [`Site`] for node `n` with no details filled in and returns its index, so the caller can set them.
 fn push(out: &mut Vec<Site>, n: Node, cat: &'static str, what: impl Into<String>) -> usize {
     let (a, b) = (n.start_position(), n.end_position());
     out.push(Site {
@@ -180,6 +198,7 @@ fn push(out: &mut Vec<Site>, n: Node, cat: &'static str, what: impl Into<String>
     out.len() - 1
 }
 
+/// Returns the unique `host:port` pairs of URLs in the first two of `nodes` (the arguments that usually hold the URL).
 fn urls_in(nodes: &[Node], src: &str) -> Vec<String> {
     let mut v = Vec::new();
     for n in nodes.iter().take(2) {
@@ -193,6 +212,9 @@ fn urls_in(nodes: &[Node], src: &str) -> Vec<String> {
 }
 
 /// Parse and extract sites. `None` when the grammar cannot be loaded or parsing fails outright.
+///
+/// Also `None` for the generic `#` / `//` languages, which have no grammar. Every node is visited in document order and
+/// handed to the language handler and to the URL-literal check.
 pub fn sites(lang: Language, rel: &str, text: &str) -> Option<Vec<Site>> {
     if matches!(lang, Language::Hash | Language::Slash) {
         return None; // no grammar: directives only, no call-site heuristics
@@ -228,6 +250,8 @@ pub fn sites(lang: Language, rel: &str, text: &str) -> Option<Vec<Site>> {
     Some(out)
 }
 
+/// Returns the tree-sitter grammar for a file: TypeScript or TSX by extension within the JavaScript family, bash for
+/// shell (and, unused, for the generic languages).
 fn language_for(lang: Language, rel: &str) -> tree_sitter::Language {
     match lang {
         Language::JavaScript => match rel.rsplit('.').next().unwrap_or("") {
@@ -244,6 +268,8 @@ fn language_for(lang: Language, rel: &str) -> tree_sitter::Language {
 /// Comments from the real syntax tree, one entry per line with the leader removed. The hand-written lexer cannot
 /// tell a JS regex literal from a division, so a stray quote inside a regex can turn the rest of a big file into a
 /// "string" and hide its directives; the grammar does not have that problem.
+///
+/// `None` for the generic `#` / `//` languages or when the grammar cannot be loaded or parsing fails.
 pub fn comments(lang: Language, rel: &str, text: &str) -> Option<Vec<crate::lexer::Comment>> {
     if matches!(lang, Language::Hash | Language::Slash) {
         return None;
@@ -401,6 +427,8 @@ fn message_context(n: Node, src: &str) -> bool {
     false
 }
 
+/// Records a string literal or shell word with a URL (up to 600 bytes) as a `net` site with `call: false`, unless it
+/// is text for people (see [`message_context`]).
 fn url_literal(n: Node, src: &str, out: &mut Vec<Site>) {
     let k = n.kind();
     if !(STRING_KINDS.contains(&k) || k == "word") {
@@ -423,6 +451,8 @@ fn url_literal(n: Node, src: &str, out: &mut Vec<Site>) {
 
 // ---- JavaScript / TypeScript -------------------------------------------------------------------------------------------
 
+/// Returns a JS member chain as dotted text (`globalThis.fetch`), looking through `!`, parentheses and `as`; `None`
+/// for anything else, such as a call or computed member in the chain.
 fn js_dotted(n: Node, src: &str) -> Option<String> {
     match n.kind() {
         "identifier" | "property_identifier" | "this" | "shorthand_property_identifier" => {
@@ -440,6 +470,7 @@ fn js_dotted(n: Node, src: &str) -> Option<String> {
     }
 }
 
+/// Splits a member expression into its object (dotted, when it is a plain chain) and property name.
 fn js_member_parts(n: Node, src: &str) -> Option<(Option<String>, String)> {
     if n.kind() == "member_expression" {
         let obj = n
@@ -452,6 +483,7 @@ fn js_member_parts(n: Node, src: &str) -> Option<(Option<String>, String)> {
     }
 }
 
+/// fs write functions recognised when called by their bare name.
 const JS_FS_BARE: &[&str] = &[
     "writeFile",
     "writeFileSync",
@@ -466,6 +498,7 @@ const JS_FS_BARE: &[&str] = &[
     "unlinkSync",
     "renameSync",
 ];
+/// fs write methods recognised on an fs-like object (see [`js_fs_object`]) or as imported names.
 const JS_FS_MEMBER: &[&str] = &[
     "writeFile",
     "writeFileSync",
@@ -497,6 +530,7 @@ const JS_FS_MEMBER: &[&str] = &[
     "move",
     "copy",
 ];
+/// fs functions taking `(source, destination)`: the second argument is the path written.
 const JS_FS_TWO_PATH: &[&str] = &[
     "copyFile",
     "copyFileSync",
@@ -510,6 +544,8 @@ const JS_FS_TWO_PATH: &[&str] = &[
     "copy",
 ];
 
+/// Returns whether a dotted object name looks like node's fs module (`fs`, `fsp`, `fse`, `fs.promises`, anything
+/// ending in `fs`, ...).
 fn js_fs_object(o: &str) -> bool {
     let last = o.rsplit('.').next().unwrap_or(o).to_ascii_lowercase();
     matches!(
@@ -522,6 +558,8 @@ fn js_fs_object(o: &str) -> bool {
 /// Local names bound to functions of node's fs modules (`import { mkdir as mk } from "node:fs/promises"`).
 type FsImports = std::collections::BTreeMap<String, String>;
 
+/// Returns whether an import specifier names an fs module (`fs`, `fs/promises`, `fs-extra`, `graceful-fs`, with or
+/// without `node:`).
 fn is_fs_module(m: &str) -> bool {
     matches!(
         m.trim_start_matches("node:"),
@@ -529,6 +567,11 @@ fn is_fs_module(m: &str) -> bool {
     )
 }
 
+/// JavaScript/TypeScript handler for one node: network clients (`fetch`, node http, sockets, axios, `WebSocket`),
+/// subprocesses, fs writes, and `process.env` reads.
+///
+/// fs functions imported or destructured from an fs module are recorded in `imp`, so calls through those local names
+/// are recognised later in the walk.
 fn js(n: Node, src: &str, out: &mut Vec<Site>, imp: &mut FsImports) {
     match n.kind() {
         "import_statement" => {
@@ -733,6 +776,7 @@ fn js(n: Node, src: &str, out: &mut Vec<Site>, imp: &mut FsImports) {
 
 // ---- Python ------------------------------------------------------------------------------------------------------------
 
+/// Returns a Python attribute chain of identifiers as dotted text (`os.environ.get`).
 fn py_dotted(n: Node, src: &str) -> Option<String> {
     match n.kind() {
         "identifier" => Some(txt(n, src).to_string()),
@@ -747,6 +791,7 @@ fn py_dotted(n: Node, src: &str) -> Option<String> {
     }
 }
 
+/// Returns the value node of the keyword argument `name=` among `args`.
 fn py_kwarg<'t>(args: &[Node<'t>], name: &str, src: &str) -> Option<Node<'t>> {
     args.iter().find_map(|a| {
         if a.kind() == "keyword_argument" && txt(a.child_by_field_name("name")?, src) == name {
@@ -757,6 +802,8 @@ fn py_kwarg<'t>(args: &[Node<'t>], name: &str, src: &str) -> Option<Node<'t>> {
     })
 }
 
+/// Python handler for one node: HTTP clients and sockets, subprocesses, environment reads, and fs writes (`open` with
+/// a literal write mode, `shutil`, `os`, `Path.write_text`/`write_bytes`).
 fn py(n: Node, src: &str, out: &mut Vec<Site>) {
     match n.kind() {
         "call" => {
@@ -914,6 +961,7 @@ fn py(n: Node, src: &str, out: &mut Vec<Site>) {
 
 // ---- Go ----------------------------------------------------------------------------------------------------------------
 
+/// Returns a Go selector chain as dotted text (`http.DefaultClient.Get`).
 fn go_dotted(n: Node, src: &str) -> Option<String> {
     match n.kind() {
         "identifier" | "package_identifier" | "field_identifier" => Some(txt(n, src).to_string()),
@@ -925,6 +973,10 @@ fn go_dotted(n: Node, src: &str) -> Option<String> {
     }
 }
 
+/// Go handler for one call expression: `net/http` clients and dialers, `os.Getenv`/`LookupEnv`, `exec.Command`, and
+/// `os`/`ioutil` writes (`OpenFile` only with a write flag).
+///
+/// For `http.NewRequest[WithContext]` the URL is looked for after the method (and context) arguments.
 fn go(n: Node, src: &str, out: &mut Vec<Site>) {
     if n.kind() != "call_expression" {
         return;
@@ -1002,12 +1054,15 @@ fn go(n: Node, src: &str, out: &mut Vec<Site>) {
 
 // ---- Shell -------------------------------------------------------------------------------------------------------------
 
+/// Returns the `argument` children of a shell command.
 fn sh_args<'t>(cmd: Node<'t>) -> Vec<Node<'t>> {
     let mut c = cmd.walk();
     let v = cmd.children_by_field_name("argument", &mut c).collect();
     v
 }
 
+/// Classifies a shell word as a write target: an absolute path (or the literal prefix before its first `$`), a temp
+/// path, or dynamic. `-` and plain numbers are dynamic.
 fn sh_path(n: Node, src: &str) -> Pth {
     let t = txt(n, src);
     let unq = strip_quotes(t);
@@ -1028,6 +1083,9 @@ fn sh_path(n: Node, src: &str) -> Pth {
     Pth::Dynamic
 }
 
+/// Shell handler for one node: network commands (curl/wget, remote git, package managers, docker pull/push),
+/// file-writing commands (target = last non-option argument), `>`/`>>`/`&>` redirections to files, and expansions of
+/// upper-case variables as environment reads.
 fn sh(n: Node, src: &str, out: &mut Vec<Site>) {
     match n.kind() {
         "command" => {

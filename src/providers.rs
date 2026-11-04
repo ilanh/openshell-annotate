@@ -10,17 +10,28 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+/// The parts of an OpenShell provider-profile YAML this tool uses.
 #[derive(Debug, Clone)]
 pub struct Profile {
+    /// Profile id (the `--type` of `openshell provider create`).
     pub id: String,
+    /// Every `credentials[].env_vars` entry; used to map a `provider ENV` directive to this profile.
     pub env_vars: Vec<String>,
     /// `host:port` entries the profile contributes to the effective policy.
     pub endpoints: Vec<String>,
     /// Binaries the profile allows to use its endpoints (empty when the profile does not say).
     pub binaries: Vec<String>,
+    /// The YAML file the profile was read from.
     pub file: PathBuf,
 }
 
+/// Reads every `.yaml` / `.yml` file in `dir` (not recursively, in path order) as a provider profile.
+///
+/// Files that are not valid YAML or have no string `id` are skipped silently.
+///
+/// # Errors
+///
+/// Fails when `dir` cannot be listed or a YAML file in it cannot be read.
 pub fn load_profiles(dir: &Path) -> Result<Vec<Profile>> {
     let mut out = Vec::new();
     let rd = std::fs::read_dir(dir)
@@ -100,16 +111,21 @@ pub fn load_profiles(dir: &Path) -> Result<Vec<Profile>> {
     Ok(out)
 }
 
+/// One provider instance to create, with the credentials it supplies.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ProviderEntry {
     /// Provider instance name to create (`openshell provider create --name`).
     pub instance: String,
     /// Profile id (`--type`), if known.
     pub profile: Option<String>,
+    /// Environment variable names passed as `--credential`, sorted and deduplicated.
     pub credentials: Vec<String>,
+    /// Where the credentials were declared (`file:line`), sorted and deduplicated.
     pub sources: Vec<String>,
     /// Endpoints the profile already contributes to the effective policy.
     pub profile_endpoints: Vec<String>,
+    /// Profile YAML to import before creating the provider; `None` when the profile id is not among the loaded
+    /// profiles (not part of the providers JSON).
     #[serde(skip)]
     pub profile_file: Option<PathBuf>,
     /// Binaries the profile allows (not part of the providers JSON).
@@ -117,19 +133,30 @@ pub struct ProviderEntry {
     pub profile_binaries: Vec<String>,
 }
 
+/// A declared credential that no profile, `profile=` attribute or `[providers.env]` entry maps to a profile.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Unmapped {
     pub env: String,
+    /// Where the credential was declared.
     pub sources: Vec<String>,
 }
 
+/// The providers output of `generate` (`--providers-out`), as JSON or a setup script.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
 pub struct ProvidersOut {
+    /// Format version of the JSON output.
     pub version: u32,
+    /// Provider instances, sorted by instance name.
     pub providers: Vec<ProviderEntry>,
+    /// Credentials without a profile, sorted by env name.
     pub unmapped: Vec<Unmapped>,
 }
 
+/// Maps the `provider` directives and `[providers].expect` entries to provider instances.
+///
+/// The profile of a credential is, in order: the directive's `profile=`, `[providers.env]`, or the first loaded
+/// profile that lists the variable in its `env_vars`. Credentials sharing an instance name (`name=`, default the
+/// profile id) become one instance.
 pub fn resolve(dirs: &[Directive], cfg: &Config, profiles: &[Profile]) -> ProvidersOut {
     // env -> (explicit profile/name, sources)
     type EnvEntry = (Option<String>, Option<String>, Vec<String>);
@@ -200,6 +227,11 @@ pub fn resolve(dirs: &[Directive], cfg: &Config, profiles: &[Profile]) -> Provid
 }
 
 impl ProvidersOut {
+    /// Returns the pretty-printed JSON form, newline-terminated.
+    ///
+    /// # Panics
+    ///
+    /// Panics if serialization fails, which plain strings, vectors and integers cannot cause.
     pub fn to_json(&self) -> String {
         let mut s = serde_json::to_string_pretty(self).unwrap();
         s.push('\n');
@@ -269,6 +301,7 @@ impl ProvidersOut {
     }
 }
 
+/// Returns `s` as one shell word: unchanged when it only has safe characters, else single-quoted.
 fn sh_quote(s: &str) -> String {
     if s.chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | '~' | ':'))

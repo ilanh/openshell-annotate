@@ -1,3 +1,7 @@
+//! Command-line entry point: parses the arguments with clap and dispatches to the `scan`, `generate`, `lint`,
+//! `diff-logs`, `docs` and `drift` subcommands of the library.
+//!
+//! Doc comments on the clap-derived types are the CLI help text (and `docs/CLI.md`), so they read as help, not rustdoc.
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use openshell_annotate::config::{Config, CONFIG_FILE};
@@ -170,6 +174,7 @@ enum Cmd {
     },
 }
 
+/// Expands a leading `~/` to `$HOME`; any other path (or a missing `HOME`) is returned unchanged.
 fn expand(p: &str) -> PathBuf {
     if let Some(rest) = p.strip_prefix("~/") {
         if let Some(h) = std::env::var_os("HOME") {
@@ -179,6 +184,15 @@ fn expand(p: &str) -> PathBuf {
     PathBuf::from(p)
 }
 
+/// Loads the provider profiles from every configured directory.
+///
+/// `--profiles-dir` (`cli_dir`) replaces `[providers].profiles_dir`; the directories in `[providers].profiles_dirs` are
+/// always added. Config paths are `~`-expanded and resolved against `root` when relative.
+///
+/// # Errors
+///
+/// Fails when a directory does not exist (with a hint naming where it was configured) or when
+/// [`providers::load_profiles`] fails for one of them.
 fn load_profiles(cfg: &Config, cli_dir: Option<&Path>, root: &Path) -> Result<Vec<Profile>> {
     let resolve = |p: &str| {
         let p = expand(p);
@@ -239,6 +253,11 @@ impl DirSource {
     }
 }
 
+/// Runs [`scan::scan`] and prints its notes (unscanned files, dead excludes) to stderr.
+///
+/// # Errors
+///
+/// Propagates the error of [`scan::scan`].
 fn do_scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
     let s = scan::scan(root, paths, cfg)?;
     for n in s.unscanned_notes() {
@@ -250,6 +269,7 @@ fn do_scan(root: &Path, paths: &[PathBuf], cfg: &Config) -> Result<Scan> {
     Ok(s)
 }
 
+/// Builds the human-output [`Style`] from the flags, whether the target stream is a terminal, and the environment.
 fn style_for(o: &OutputOpts, stream_is_tty: bool) -> Style {
     let env = |k: &str| std::env::var(k).ok();
     Style {
@@ -277,6 +297,7 @@ fn lines_of<'a>(root: &'a Path, s: &'a Scan) -> impl Fn(&str) -> Option<Vec<Stri
     }
 }
 
+/// Prints the directive parse errors of the scan to stderr and returns whether there were any.
 fn report_parse_errors(s: &Scan) -> bool {
     for e in &s.errors {
         eprintln!("error: {e}");
@@ -284,6 +305,15 @@ fn report_parse_errors(s: &Scan) -> bool {
     !s.errors.is_empty()
 }
 
+/// Executes the parsed command and returns its exit code.
+///
+/// Findings (parse errors, lint errors, missing directives, drift) are reported as exit code 1; only unexpected
+/// failures come back as `Err`, which [`main`] maps to exit code 2.
+///
+/// # Errors
+///
+/// Fails when the root cannot be canonicalized, the config or an input file cannot be read or parsed, an output file
+/// cannot be written, JSON serialization fails, or `docs --check` finds stale docs.
 fn run(cli: Cli) -> Result<ExitCode> {
     if let Cmd::Docs { out, check } = &cli.cmd {
         let cmd = Cli::command();
@@ -309,6 +339,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             let s = do_scan(&root, &paths, &cfg)?;
             match format {
                 Format::Json => {
+                    /// JSON shape of `scan --format json`.
                     #[derive(serde::Serialize)]
                     struct Out<'a> {
                         directives: &'a [Directive],
@@ -428,6 +459,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                             g.stats.directives, g.stats.network_rules, g.stats.endpoints, g.stats.binaries, g.stats.fs_read, g.stats.fs_write, g.stats.providers, g.stats.unmapped_providers
                         ),
                         Format::Json => {
+                            /// JSON summary `generate --format json` writes to stderr.
                             #[derive(serde::Serialize)]
                             struct Summary<'a> {
                                 stats: &'a generate::Stats,
@@ -758,6 +790,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
     }
 }
 
+/// Parses the command line, runs it, and maps an error to exit code 2 after printing it.
 fn main() -> ExitCode {
     match run(Cli::parse()) {
         Ok(c) => c,
