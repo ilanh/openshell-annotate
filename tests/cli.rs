@@ -1783,3 +1783,58 @@ fn colour_flag_and_environment_apply_to_scan_diff_logs_and_generate() {
         assert!(text(&o).is_ascii(), "{args:?}");
     }
 }
+
+/// `examples/polyglot` ships its generated policy and providers file. Regenerating must give the same
+/// output (the header carries `@VERSION@` instead of the tool version), and `drift` must be clean.
+#[test]
+fn polyglot_example_regenerates_identically_and_has_no_drift() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/polyglot");
+    let t = tempfile::tempdir().unwrap();
+    copy_dir(&src, t.path());
+    let o = run(
+        t.path(),
+        &[
+            "generate",
+            "-o",
+            "new-policy.yaml",
+            "--providers-out",
+            "new-providers.json",
+        ],
+    );
+    assert!(o.status.success(), "{}", err(&o));
+    let committed = committed_policy(&src);
+    let fresh = std::fs::read_to_string(t.path().join("new-policy.yaml")).unwrap();
+    assert_eq!(
+        fresh, committed,
+        "examples/polyglot/openshell/policy.yaml is stale; regenerate it (see examples/polyglot/README.md)"
+    );
+    let committed = std::fs::read_to_string(src.join("openshell/providers.json")).unwrap();
+    let fresh = std::fs::read_to_string(t.path().join("new-providers.json")).unwrap();
+    assert_eq!(
+        fresh, committed,
+        "examples/polyglot/openshell/providers.json is stale"
+    );
+    std::fs::write(
+        t.path().join("openshell/policy.yaml"),
+        committed_policy(&src),
+    )
+    .unwrap();
+    let o = run(
+        t.path(),
+        &[
+            "drift",
+            "--policy",
+            "openshell/policy.yaml",
+            "--providers",
+            "openshell/providers.json",
+        ],
+    );
+    assert!(o.status.success(), "drift: {}{}", out(&o), err(&o));
+    assert!(out(&o).contains("no drift"), "{}", out(&o));
+}
+
+fn committed_policy(example: &Path) -> String {
+    std::fs::read_to_string(example.join("openshell/policy.yaml"))
+        .unwrap()
+        .replace("@VERSION@", env!("CARGO_PKG_VERSION"))
+}
