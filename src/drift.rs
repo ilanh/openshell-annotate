@@ -8,6 +8,7 @@ use openshell_policy_schema::{NetworkPolicyRule, PolicyDocument};
 use serde::Serialize;
 use std::collections::BTreeSet;
 
+/// Kind of difference between the generated and the committed policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Change {
@@ -15,19 +16,25 @@ pub enum Change {
     Missing,
     /// Committed policy grants something no directive declares.
     Extra,
+    /// Present on both sides with different content.
     Changed,
 }
 
+/// One drift finding.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Finding {
     pub change: Change,
+    /// Policy section, e.g. `network_policies` or `filesystem_policy.read_only`.
     pub section: String,
+    /// Rule key, path or field within the section.
     pub item: String,
+    /// Human-readable description of the difference.
     pub detail: String,
     /// `startup` sections need a sandbox recreate to change; `live` can be updated on a running sandbox.
     pub applies: &'static str,
 }
 
+/// Result of [`compare`] (plus any [`compare_providers`] findings the caller adds).
 #[derive(Debug, Default, Serialize)]
 pub struct Report {
     pub findings: Vec<Finding>,
@@ -35,15 +42,18 @@ pub struct Report {
     pub unmanaged: Vec<String>,
 }
 
+/// Returns the endpoints of a rule as `host:[ports]` strings.
 fn eps(r: &NetworkPolicyRule) -> BTreeSet<String> {
     r.endpoints
         .iter()
         .map(|e| format!("{}:{:?}", e.host, e.effective_ports()))
         .collect()
 }
+/// Returns the binary paths of a rule.
 fn bins(r: &NetworkPolicyRule) -> BTreeSet<String> {
     r.binaries.iter().map(|b| b.path.clone()).collect()
 }
+/// Describes what is only in `a` (declared) and only in `b` (committed); empty when the sets are equal.
 fn diff_sets(a: &BTreeSet<String>, b: &BTreeSet<String>) -> String {
     let add: Vec<_> = a.difference(b).cloned().collect();
     let del: Vec<_> = b.difference(a).cloned().collect();
@@ -57,6 +67,10 @@ fn diff_sets(a: &BTreeSet<String>, b: &BTreeSet<String>) -> String {
     s.join("; ")
 }
 
+/// Compares the network rules (by key), the effective filesystem policy and the process identity of two policies.
+///
+/// Committed `landlock` (when the generated policy has none) and `network_middlewares` go to
+/// [`Report::unmanaged`]; with `strict` they become [`Change::Extra`] findings instead.
 pub fn compare(generated: &PolicyDocument, committed: &PolicyDocument, strict: bool) -> Report {
     let mut r = Report::default();
     // network_policies (live)
@@ -200,6 +214,14 @@ pub fn compare(generated: &PolicyDocument, committed: &PolicyDocument, strict: b
     r
 }
 
+/// Compares the generated providers output with a committed providers JSON file.
+///
+/// Providers are matched by instance name and compared as whole JSON objects; the `unmapped` lists are compared as
+/// sets.
+///
+/// # Panics
+///
+/// Panics if `generated` cannot be converted to a JSON value, which its plain fields cannot cause.
 pub fn compare_providers(generated: &ProvidersOut, committed: &serde_json::Value) -> Vec<Finding> {
     let mut out = Vec::new();
     let gen = serde_json::to_value(generated).unwrap();
@@ -273,6 +295,7 @@ pub fn compare_providers(generated: &ProvidersOut, committed: &serde_json::Value
 }
 
 impl Report {
+    /// Renders one line per finding, then one note per unmanaged section.
     pub fn render(&self) -> String {
         let mut s = String::new();
         for f in &self.findings {

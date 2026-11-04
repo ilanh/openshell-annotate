@@ -9,6 +9,8 @@ fn clean(s: &str) -> String {
     s.lines().map(str::trim_end).collect::<Vec<_>>().join("\n")
 }
 
+/// Renders the long help of `cmd` without colour at a fixed 100-column width, so the text does not depend on the
+/// terminal it is generated in.
 fn help_of(cmd: &clap::Command) -> String {
     let mut c = cmd
         .clone()
@@ -19,6 +21,8 @@ fn help_of(cmd: &clap::Command) -> String {
 }
 
 /// `docs/CLI.md`: the help of the root command and of every subcommand.
+///
+/// Hidden subcommands are skipped.
 pub fn cli_md(root: &clap::Command) -> String {
     let mut s = String::new();
     s.push_str("# CLI reference\n\n");
@@ -44,6 +48,12 @@ pub fn generate(root: &clap::Command) -> Vec<(&'static str, String)> {
 }
 
 /// Write the generated docs into `dir`.
+///
+/// Creates `dir` if needed and returns the paths of the files written.
+///
+/// # Errors
+///
+/// Fails when `dir` cannot be created or a file in it cannot be written.
 pub fn write(root: &clap::Command, dir: &Path) -> Result<Vec<String>> {
     std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     let mut out = Vec::new();
@@ -56,6 +66,10 @@ pub fn write(root: &clap::Command, dir: &Path) -> Result<Vec<String>> {
 }
 
 /// Fail (with the stale file names) when the committed docs differ from what the code generates.
+///
+/// # Errors
+///
+/// Fails when any generated file in `dir` is missing, unreadable or differs from the generated content.
 pub fn check(root: &clap::Command, dir: &Path) -> Result<()> {
     let mut stale = Vec::new();
     for (name, body) in generate(root) {

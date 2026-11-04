@@ -14,6 +14,7 @@
 
 use std::path::Path;
 
+/// How a source file is lexed; also selects the lint patterns and the `[languages]` default binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     JavaScript, // js jsx mjs cjs ts tsx mts cts
@@ -104,6 +105,9 @@ impl Language {
         }
     }
 
+    /// Returns the first-class language of a file (JS/TS, Python, Go, shell), ignoring `[scan.comment_leaders]`.
+    ///
+    /// `Dockerfile` and `.sh`/`.bash`/`.zsh` files are shell.
     pub fn from_path(path: &Path) -> Option<Self> {
         let name = path.file_name()?.to_str()?;
         if name == "Dockerfile"
@@ -136,6 +140,7 @@ impl Language {
     }
 }
 
+/// The comment text on one source line; a block comment yields one [`Comment`] per line it spans.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Comment {
     /// 1-based line number.
@@ -144,8 +149,10 @@ pub struct Comment {
     pub text: String,
 }
 
+/// Result of [`lex`]: the comments of a file plus its raw and code-masked lines.
 #[derive(Debug, Default)]
 pub struct Lexed {
+    /// Comments in source order.
     pub comments: Vec<Comment>,
     /// Original lines (no trailing newline).
     pub raw: Vec<String>,
@@ -153,6 +160,7 @@ pub struct Lexed {
     pub code: Vec<String>,
 }
 
+/// Lexes `src` as `lang`, returning its comments and the code mask.
 pub fn lex(lang: Language, src: &str) -> Lexed {
     match lang {
         Language::JavaScript => lex_clike(src, false),
@@ -164,16 +172,21 @@ pub fn lex(lang: Language, src: &str) -> Lexed {
     }
 }
 
+/// Builder that accumulates a [`Lexed`] one character and one line at a time.
 struct Out {
     comments: Vec<Comment>,
     raw: Vec<String>,
     code: Vec<String>,
+    /// Code mask of the current line so far.
     cur_code: String,
+    /// Comment text of the current line so far; `Some` once a comment has started on it.
     cur_comment: Option<String>,
+    /// 1-based number of the current line.
     line: usize,
 }
 
 impl Out {
+    /// Starts at line 1 with the raw lines of `src` already split.
     fn new(src: &str) -> Self {
         Out {
             comments: Vec::new(),
@@ -184,19 +197,24 @@ impl Out {
             line: 1,
         }
     }
+    /// Appends a code character to the mask unchanged.
     fn code(&mut self, c: char) {
         self.cur_code.push(c);
     }
+    /// Appends a blank for `c` to the mask, keeping tabs so columns still line up.
     fn blank(&mut self, c: char) {
         self.cur_code.push(if c == '\t' { '\t' } else { ' ' });
     }
+    /// Appends `c` to the current comment and blanks it in the mask.
     fn comment_char(&mut self, c: char) {
         self.cur_comment.get_or_insert_with(String::new).push(c);
         self.blank(c);
     }
+    /// Starts an empty comment on the current line.
     fn start_comment(&mut self) {
         self.cur_comment = Some(String::new());
     }
+    /// Ends the current line: records its comment (if any) and mask line, then advances the line number.
     fn newline(&mut self) {
         if let Some(t) = self.cur_comment.take() {
             self.comments.push(Comment {
@@ -207,6 +225,7 @@ impl Out {
         self.code.push(std::mem::take(&mut self.cur_code));
         self.line += 1;
     }
+    /// Flushes a last line without a trailing newline and returns the result.
     fn finish(mut self) -> Lexed {
         if self.cur_comment.is_some() || !self.cur_code.is_empty() {
             self.newline();
@@ -219,18 +238,26 @@ impl Out {
     }
 }
 
+/// Removes the leading whitespace and one optional `*` of a block-comment line (` * text` -> `text`).
 fn strip_block_leader(text: &str) -> String {
     let t = text.trim_start();
     let t = t.strip_prefix('*').unwrap_or(t);
     t.trim_start().to_string()
 }
 
+/// One level of the JS template-literal nesting stack in [`lex_clike`].
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
     Code(usize), // brace depth (for template `${ }`)
+    /// Inside a `` ` `` template literal, outside any `${ }`.
     Template,
 }
 
+/// Lexes `//` and `/* */` comments, `'`/`"` strings and backtick strings.
+///
+/// With `go` set, a backtick opens a Go raw string (no interpolation); otherwise it opens a JS template literal whose
+/// `${ }` parts are lexed as code, tracked by a stack of [`Mode`]s. An unterminated `'`/`"` string ends at the end of
+/// its line.
 fn lex_clike(src: &str, go: bool) -> Lexed {
     let chars: Vec<char> = src.chars().collect();
     let mut o = Out::new(src);
@@ -398,6 +425,7 @@ fn lex_clike(src: &str, go: bool) -> Lexed {
 }
 
 impl Out {
+    /// Same as [`Out::finish`], used by [`lex_clike`].
     fn finish_clike(mut self) -> Lexed {
         // Flush trailing line comment (no newline at EOF) with the line number.
         if self.cur_comment.is_some() || !self.cur_code.is_empty() {
@@ -411,6 +439,12 @@ impl Out {
     }
 }
 
+/// Lexes `#` comments and quoted strings for Python, shell and the generic `#` languages.
+///
+/// With `python` set, `#` always starts a comment outside strings and `'''`/`"""` strings may span lines. Otherwise
+/// `#` starts a comment only at the start of a line or after whitespace or `; ( ) & |`, and with `shell` set never
+/// after `$` (`$#`); shell heredoc bodies are blanked up to their terminator line. In Python and shell an unterminated
+/// `'`/`"` string ends at the end of its line.
 fn lex_hash(src: &str, python: bool, shell: bool) -> Lexed {
     let chars: Vec<char> = src.chars().collect();
     let mut o = Out::new(src);
@@ -574,6 +608,8 @@ fn lex_hash(src: &str, python: bool, shell: bool) -> Lexed {
     o.finish()
 }
 
+/// Returns the heredoc terminator from the text after `<<` (`-`, quotes and `\` before the word are skipped), or
+/// `None` for a here-string `<<<` or when no word follows.
 fn find_heredoc_tag(rest: &str) -> Option<String> {
     if rest.starts_with('<') {
         return None; // here-string <<<

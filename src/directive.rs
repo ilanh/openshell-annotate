@@ -12,8 +12,10 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
 
+/// The word that starts a directive inside a comment.
 pub const MARKER: &str = "@openshell";
 
+/// The `key=value` attributes of a directive, split by whether the key may repeat.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Attrs {
     /// Single-valued attributes (last one wins is *not* allowed: duplicates are errors).
@@ -22,18 +24,26 @@ pub struct Attrs {
     pub multi: BTreeMap<String, Vec<String>>,
 }
 
+/// The verb of a directive with its positional arguments.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Kind {
+    /// `egress host:port[,port...]`; the host is lower-cased and the ports are deduplicated in order.
     Egress { host: String, ports: Vec<u16> },
+    /// `provider ENV`: the app reads a credential from this environment variable.
     Provider { env: String },
+    /// `fs read PATH` (`write: false`) or `fs write PATH` (`write: true`).
     Fs { write: bool, path: String },
+    /// `bin PATH`: an executable the sandboxed process runs.
     Bin { path: String },
+    /// `process`: the sandbox process identity, given by attributes.
     Process,
+    /// `ignore`: suppresses lint call-site findings (optionally for one `kind=` category).
     Ignore,
 }
 
 impl Kind {
+    /// Returns the directive keyword as written in source, with the mode for `fs` (`"fs read"`, `"fs write"`).
     pub fn name(&self) -> &'static str {
         match self {
             Kind::Egress { .. } => "egress",
@@ -47,10 +57,14 @@ impl Kind {
     }
 }
 
+/// One parsed `@openshell` directive and where it was written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Directive {
+    /// Path relative to the repository root.
     pub file: String,
+    /// 1-based line of the comment.
     pub line: usize,
+    /// Language of the source file; [`extract`] always sets it. Not serialized.
     #[serde(skip)]
     pub lang: Option<Language>,
     #[serde(flatten)]
@@ -59,12 +73,15 @@ pub struct Directive {
 }
 
 impl Directive {
+    /// Returns the value of the single-valued attribute `k`.
     pub fn attr(&self, k: &str) -> Option<&str> {
         self.attrs.single.get(k).map(String::as_str)
     }
+    /// Returns the `reason=` attribute.
     pub fn reason(&self) -> Option<&str> {
         self.attr("reason")
     }
+    /// Returns the location as `file:line`.
     pub fn loc(&self) -> String {
         format!("{}:{}", self.file, self.line)
     }
@@ -85,11 +102,13 @@ impl Directive {
             _ => vec![],
         }
     }
+    /// Returns whether the directive has `scope=file`, i.e. applies to the whole file rather than the lines below it.
     pub fn file_scoped(&self) -> bool {
         self.attr("scope") == Some("file")
     }
 }
 
+/// A comment that starts with [`MARKER`] but is not a valid directive.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ParseError {
     pub file: String,
@@ -104,6 +123,9 @@ impl fmt::Display for ParseError {
 }
 
 /// Extract directives from lexed comments.
+///
+/// Only comments whose trimmed text starts with [`MARKER`] followed by whitespace (or nothing) are considered; each
+/// of those yields either a [`Directive`] or a [`ParseError`].
 pub fn extract(
     file: &str,
     lang: Language,
@@ -138,12 +160,23 @@ pub fn extract(
     (ds, es)
 }
 
+/// A token of a directive body.
 #[derive(Debug, PartialEq)]
 enum Tok {
+    /// A bare word: the verb or a positional argument.
     Word(String),
+    /// `key=value` or `key="quoted value"` (quotes removed, `\"` and `\\` unescaped).
     Pair(String, String),
 }
 
+/// Splits a directive body into words and `key=value` pairs.
+///
+/// A word starting with `/` is a path and may contain `=` and `"`.
+///
+/// # Errors
+///
+/// Returns a message for an empty key, an unterminated quoted value, text glued to a closing quote, or a quote
+/// anywhere other than at the start of a value.
 fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
     let chars: Vec<char> = s.chars().collect();
     let mut i = 0;
@@ -220,6 +253,8 @@ fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
     Ok(out)
 }
 
+/// Returns the attribute names `verb` accepts as `(single-valued, repeatable)`; the common attributes count as
+/// single-valued. An unknown verb accepts none.
 fn allowed_attrs(verb: &str) -> (Vec<&'static str>, Vec<&'static str>) {
     match spec::verb(verb) {
         Some(v) => (
@@ -235,6 +270,12 @@ fn allowed_attrs(verb: &str) -> (Vec<&'static str>, Vec<&'static str>) {
     }
 }
 
+/// Parses the text after [`MARKER`] into a [`Kind`] and its [`Attrs`].
+///
+/// # Errors
+///
+/// Returns a user-facing message for a tokenizer error, a missing or unknown verb, an unknown or duplicate attribute,
+/// the wrong number of positional arguments, or an invalid value (scope, port, env name, fs mode, ignore kind).
 fn parse_body(body: &str) -> Result<(Kind, Attrs), String> {
     let toks = tokenize(body)?;
     let mut it = toks.into_iter();
@@ -347,12 +388,20 @@ fn parse_body(body: &str) -> Result<(Kind, Attrs), String> {
     Ok((kind, attrs))
 }
 
+/// Returns whether `s` matches `[A-Z_][A-Z0-9_]*`.
 fn valid_env(s: &str) -> bool {
     let mut cs = s.chars();
     matches!(cs.next(), Some(c) if c.is_ascii_uppercase() || c == '_')
         && cs.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
+/// Parses an egress target `host:port[,port...]` into the lower-cased host and its unique ports.
+///
+/// The split is at the last `:`.
+///
+/// # Errors
+///
+/// Returns a message when the port is missing, the host is empty, or a port is not a number in `1..=65535`.
 fn parse_target(t: &str) -> Result<(String, Vec<u16>), String> {
     let (host, ports) = t.rsplit_once(':').ok_or_else(|| {
         format!("`{t}`: a port is required (host:port); OpenShell rejects endpoints without one")

@@ -11,29 +11,39 @@ use crate::validate;
 use openshell_policy_schema::{parse_policy, PolicyDocument};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Tool name and version, written into the header of generated files.
 pub const TOOL: &str = concat!("openshell-annotate ", env!("CARGO_PKG_VERSION"));
+/// Most source locations listed in the comment above one policy entry; the rest are counted.
 const MAX_SOURCES_SHOWN: usize = 6;
 
+/// Output of [`generate`].
 pub struct Generated {
+    /// The policy as written, with provenance comments.
     pub policy_yaml: String,
+    /// [`Generated::policy_yaml`] parsed back by `openshell_policy_schema`.
     pub doc: PolicyDocument,
     pub providers: ProvidersOut,
     pub warnings: Vec<String>,
     pub stats: Stats,
 }
 
+/// Counts for the `generate` summary.
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Stats {
+    /// All directives passed in, of every kind.
     pub directives: usize,
     pub network_rules: usize,
     pub endpoints: usize,
+    /// Binary entries summed over all network rules.
     pub binaries: usize,
     pub fs_read: usize,
     pub fs_write: usize,
     pub providers: usize,
+    /// Credentials no provider profile declares.
     pub unmapped_providers: usize,
 }
 
+/// Formats a miette report and its whole cause chain on one line, joined with `: `.
 pub fn miette_str(e: &miette::Report) -> String {
     e.chain()
         .map(|c| c.to_string())
@@ -41,28 +51,38 @@ pub fn miette_str(e: &miette::Report) -> String {
         .join(": ")
 }
 
+/// Endpoint settings of an egress directive; two directives for one host:port must agree on them.
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct Spec {
     protocol: Option<String>,
     access: Option<String>,
+    /// Only set for inspected (non-`tcp`) protocols.
     enforcement: Option<String>,
     tls: Option<String>,
+    /// `(method, path)` pairs from `allow=`.
     allow: Vec<(String, String)>,
+    /// `(method, path)` pairs from `deny=`.
     deny: Vec<(String, String)>,
 }
 
+/// One endpoint being assembled: its settings and every directive that asks for it.
 struct Ep {
     spec: Spec,
+    /// Location of the directive that first set [`Ep::spec`], for conflict messages.
     spec_origin: String,
     sources: Vec<(String, String)>, // (loc, reason)
 }
 
+/// One `network_policies` rule being assembled.
 #[derive(Default)]
 struct RuleAcc {
+    /// Endpoints keyed by host and sorted ports.
     eps: BTreeMap<(String, Vec<u16>), Ep>,
     bins: BTreeMap<String, String>, // path -> origin
 }
 
+/// Returns the default rule key for a host: lower-cased ASCII alphanumerics, every other run of characters collapsed
+/// to one `_`, trimmed; `endpoint` if nothing is left.
 pub(crate) fn slug(host: &str) -> String {
     let mut s = String::new();
     let mut last_us = true;
@@ -83,11 +103,24 @@ pub(crate) fn slug(host: &str) -> String {
     }
 }
 
+/// Splits a validated `METHOD:/path` value at its first `:`.
+///
+/// # Panics
+///
+/// Panics if `s` has no `:`; [`validate::check_directive`] rejects such values before generation.
 fn split_rule(s: &str) -> (String, String) {
     let (m, p) = s.split_once(':').unwrap();
     (m.to_string(), p.to_string())
 }
 
+/// Builds the endpoint settings of an egress directive.
+///
+/// Any of `access`, `allow` or `deny` implies inspection, so the protocol defaults to `rest`; inspected protocols get
+/// `enforce=` or else `[policy].enforcement`.
+///
+/// # Panics
+///
+/// Panics (via [`split_rule`]) on an `allow`/`deny` value without `:`, which validation rules out.
 fn spec_of(d: &Directive, cfg: &Config) -> Spec {
     let allow: Vec<_> = d
         .attrs
@@ -203,6 +236,15 @@ fn merge_overlapping_ports(rkey: &str, acc: &mut RuleAcc, errors: &mut Vec<Strin
     }
 }
 
+/// Returns the binary for an egress directive and a description of where it came from.
+///
+/// In order: the directive's `bin=`; the nearest `@openshell bin` at or above it in the same file; a `scope=file`
+/// `bin` anywhere in the file; the `[languages]` entry for its language (or, for the generic `#` / `//` languages,
+/// for its file extension).
+///
+/// # Errors
+///
+/// Returns a message with the fixes when none of these gives a binary.
 pub(crate) fn find_bin(
     d: &Directive,
     bins: &[&Directive],
@@ -247,10 +289,13 @@ pub(crate) fn find_bin(
     Err(format!("{}: cannot determine the executable", d.loc()))
 }
 
+/// Quotes `s` as a JSON string, which is also a valid YAML double-quoted scalar.
 fn qs(s: &str) -> String {
     serde_json::to_string(s).unwrap()
 }
 
+/// Returns `k` as a YAML mapping key: bare when it is a plain identifier that YAML cannot read as a boolean or null,
+/// quoted otherwise.
 fn key(k: &str) -> String {
     let ok = !k.is_empty()
         && k.chars()
@@ -269,6 +314,7 @@ fn key(k: &str) -> String {
     }
 }
 
+/// Makes `s` safe for a one-line YAML comment: control characters become spaces and whitespace runs collapse.
 fn clean(s: &str) -> String {
     let t: String = s
         .chars()
@@ -295,6 +341,8 @@ fn wrap_words(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
+/// Appends the provenance comment for a policy entry: `# reason (file:line)` per source (or just `# file:line`
+/// without a reason), at most [`MAX_SOURCES_SHOWN`] of them, then a count of the rest.
 fn comment_lines(sources: &[(String, String)], indent: &str, out: &mut String) {
     for (loc, reason) in sources.iter().take(MAX_SOURCES_SHOWN) {
         if reason.is_empty() {
@@ -316,6 +364,20 @@ fn comment_lines(sources: &[(String, String)], indent: &str, out: &mut String) {
     }
 }
 
+/// Builds the policy YAML and the providers output from the directives.
+///
+/// Egress directives are grouped into rules by `rule=` or the host slug, endpoints by host and ports; endpoints
+/// of one host whose ports overlap are joined, and differing `allow`/`deny` lists for one endpoint are unioned. An
+/// `fs read` that is also an `fs write` is emitted only under `read_write`. Baseline system paths are added according
+/// to `[policy].system_paths`. The YAML is then re-parsed with `parse_policy` and checked with
+/// [`validate::check_document`].
+///
+/// # Errors
+///
+/// Returns every problem found: invalid directives (in that case nothing else is checked), egress directives with no
+/// known binary, conflicting endpoint settings, different hosts mapping to one rule key, an invalid
+/// `[policy].system_paths`, conflicting `process` user/group values, and generated YAML that fails schema parsing or
+/// the document checks.
 pub fn generate(
     dirs: &[Directive],
     cfg: &Config,

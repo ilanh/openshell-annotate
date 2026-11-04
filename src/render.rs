@@ -27,6 +27,7 @@ pub fn kind_category(k: &Kind) -> &'static str {
     }
 }
 
+/// ANSI SGR parameters for a category's label colour.
 fn category_sgr(cat: &str) -> &'static str {
     match cat {
         "net" => "1;36",
@@ -37,6 +38,7 @@ fn category_sgr(cat: &str) -> &'static str {
     }
 }
 
+/// List separator: ` · ` with icons, `, ` without.
 fn sep(style: Style) -> &'static str {
     if style.icons {
         " · "
@@ -45,6 +47,7 @@ fn sep(style: Style) -> &'static str {
     }
 }
 
+/// `→` with icons, `->` without.
 fn arrow(style: Style) -> &'static str {
     if style.icons {
         "→"
@@ -53,6 +56,7 @@ fn arrow(style: Style) -> &'static str {
     }
 }
 
+/// `•` with icons, `-` without.
 fn bullet(style: Style) -> &'static str {
     if style.icons {
         "•"
@@ -61,6 +65,7 @@ fn bullet(style: Style) -> &'static str {
     }
 }
 
+/// `…` with icons, `...` without.
 fn ellipsis(style: Style) -> &'static str {
     if style.icons {
         "…"
@@ -97,6 +102,7 @@ fn wrap(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
+/// Width at which detail and warning text is wrapped.
 const WRAP: usize = 96;
 
 // ---- source snippets -------------------------------------------------------------------------------------------------
@@ -108,6 +114,11 @@ struct Row {
     text: String,
 }
 
+/// Builds the row for existing line `n` (1-based), tab-expanded and cut to the report width.
+///
+/// # Panics
+///
+/// Panics if `n` is 0 or greater than `lines.len()`; callers check the range first.
 fn existing(lines: &[String], n: usize, style: Style) -> Row {
     Row {
         num: Some(n),
@@ -177,6 +188,7 @@ fn detail_wrapped(
     }
 }
 
+/// Splits `file:line` at the last `:`; `None` when there is no colon or the line is not a number.
 fn split_loc(loc: &str) -> Option<(&str, usize)> {
     let (f, l) = loc.rsplit_once(':')?;
     Some((f, l.parse().ok()?))
@@ -286,6 +298,7 @@ pub fn scan_human(scan: &Scan, lines_of: LinesOf, style: Style) -> String {
     out
 }
 
+/// Appends a one-line count of parse errors (their details go to stderr), if there are any.
 fn push_scan_errors(out: &mut String, scan: &Scan, style: Style) {
     if !scan.errors.is_empty() {
         let mark = if style.icons { "✖ " } else { "" };
@@ -300,6 +313,7 @@ fn push_scan_errors(out: &mut String, scan: &Scan, style: Style) {
     }
 }
 
+/// Formats per-category counts (`🌐 net 3 · 📁 fs 1`) for a `by category:` line.
 fn category_counts(cats: &BTreeMap<&str, usize>, style: Style) -> String {
     cats.iter()
         .map(|(c, n)| {
@@ -315,6 +329,7 @@ fn category_counts(cats: &BTreeMap<&str, usize>, style: Style) -> String {
 
 // ---- diff-logs -----------------------------------------------------------------------------------------------------------
 
+/// Formats `host:port`, with `?` for an unknown port.
 fn hostport(host: &str, port: Option<u16>) -> String {
     format!("{host}:{}", port.map_or("?".into(), |p| p.to_string()))
 }
@@ -340,6 +355,7 @@ fn entry_head(
     s
 }
 
+/// Formats an event count (`×3`), followed by the binary when it is known.
 fn count_binary(count: usize, binary: Option<&str>, style: Style) -> String {
     let x = if style.icons { "×" } else { "x" };
     match binary.filter(|b| !b.is_empty()) {
@@ -348,6 +364,7 @@ fn count_binary(count: usize, binary: Option<&str>, style: Style) -> String {
     }
 }
 
+/// Appends a section heading with its item count.
 fn section(out: &mut String, style: Style, icon: &str, title: &str, n: usize) {
     let icon = if style.icons && !icon.is_empty() {
         format!("{icon} ")
@@ -652,6 +669,7 @@ pub fn diff_logs_human(
 
 // ---- generate ------------------------------------------------------------------------------------------------------------
 
+/// Lists the locations of the directives matching `pred`: up to three, then `+N more`; empty when none match.
 fn from_locs(dirs: &[Directive], pred: impl Fn(&Directive) -> bool) -> String {
     let locs: Vec<String> = dirs
         .iter()
@@ -665,6 +683,8 @@ fn from_locs(dirs: &[Directive], pred: impl Fn(&Directive) -> bool) -> String {
     }
 }
 
+/// Drops trailing slashes (except from `/`), as `generate` does for fs paths, so policy paths can be traced back to
+/// their directives.
 fn norm_path(p: &str) -> String {
     if p.len() > 1 {
         p.trim_end_matches('/').to_string()
@@ -673,6 +693,7 @@ fn norm_path(p: &str) -> String {
     }
 }
 
+/// Appends a summary line: the coloured, padded section name, then `text`.
 fn label(out: &mut String, style: Style, cat: &str, name: &str, text: &str) {
     out.push_str(&style.paint(
         category_sgr(cat),

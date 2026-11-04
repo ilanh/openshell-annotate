@@ -13,9 +13,12 @@ use std::collections::BTreeSet;
 /// One generated file.
 #[derive(Debug, Clone)]
 pub struct Skeleton {
+    /// Profile id, from [`profile_id`].
     pub id: String,
+    /// `<id>.yaml`.
     pub file_name: String,
     pub yaml: String,
+    /// Number of endpoints listed in the skeleton.
     pub endpoints: usize,
 }
 
@@ -24,10 +27,17 @@ pub fn profile_id(env: &str) -> String {
     env.to_ascii_lowercase().replace('_', "-")
 }
 
+/// Quotes `s` as a JSON string, which is also a valid YAML double-quoted scalar.
 fn q(s: &str) -> String {
     serde_json::to_string(s).unwrap()
 }
 
+/// Builds one profile skeleton per unmapped credential.
+///
+/// Endpoints and binaries come from the `egress` directives in the files whose `file:line` sources declare the
+/// credential (one endpoint per host and port, the first directive's `access` and `tls=skip` win); credentials
+/// declared only in `[providers].expect` have no file and get `TODO` placeholders. Egress directives whose binary
+/// cannot be determined still contribute endpoints.
 pub fn scaffold(unmapped: &[Unmapped], dirs: &[Directive], cfg: &Config) -> Vec<Skeleton> {
     let bins: Vec<&Directive> = dirs
         .iter()

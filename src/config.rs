@@ -1,10 +1,14 @@
 //! `openshell-annotate.toml` (strict: unknown keys are errors).
+//!
+//! Defines the [`Config`] sections, their defaults, the shared exclude-pattern matcher [`path_matches`], and loading
+//! with the value checks serde cannot express.
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+/// File name of the config file, looked up in the repository root.
 pub const CONFIG_FILE: &str = "openshell-annotate.toml";
 
 /// Nearest directory at or above `start` that contains `openshell-annotate.toml`.
@@ -15,6 +19,7 @@ pub fn find_root(start: &Path) -> Option<std::path::PathBuf> {
         .map(Path::to_path_buf)
 }
 
+/// The whole `openshell-annotate.toml`; every section is optional and defaults when absent.
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -22,18 +27,24 @@ pub struct Config {
     /// Must be the *real path* of the binary inside the sandbox image (OpenShell does not follow symlinks).
     #[serde(default)]
     pub languages: BTreeMap<String, String>,
+    /// `[policy]`: how the generated policy is shaped.
     #[serde(default)]
     pub policy: PolicyConfig,
+    /// `[providers]`: where provider profiles come from and how credentials map to them.
     #[serde(default)]
     pub providers: ProvidersConfig,
+    /// `[lint]`: call-site heuristics.
     #[serde(default)]
     pub lint: LintConfig,
+    /// `[scan]`: which files are scanned and how their comments are recognised.
     #[serde(default)]
     pub scan: ScanConfig,
+    /// `[diff-logs]`: where suggested directives may be placed.
     #[serde(default, rename = "diff-logs")]
     pub diff_logs: DiffLogsConfig,
 }
 
+/// The `[diff-logs]` section.
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct DiffLogsConfig {
@@ -43,6 +54,7 @@ pub struct DiffLogsConfig {
     pub exclude: Vec<String>,
 }
 
+/// The `[policy]` section.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyConfig {
@@ -69,6 +81,7 @@ impl Default for PolicyConfig {
     }
 }
 
+/// The `[providers]` section.
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ProvidersConfig {
@@ -88,6 +101,7 @@ pub struct ProvidersConfig {
     pub expect: Vec<String>,
 }
 
+/// The `[lint]` section.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LintConfig {
@@ -117,9 +131,11 @@ pub struct LintConfig {
     pub fs_dynamic: String,
 }
 
+/// Serde default for [`LintConfig::engine`].
 fn engine() -> String {
     "treesitter".into()
 }
+/// Serde default for [`LintConfig::fs_dynamic`].
 fn fs_dynamic() -> String {
     "summary".into()
 }
@@ -147,6 +163,7 @@ pub fn path_matches(rel: &str, pat: &str) -> bool {
     }
 }
 
+/// The `[scan]` section.
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ScanConfig {
@@ -162,21 +179,32 @@ pub struct ScanConfig {
     pub comment_leaders: BTreeMap<String, String>,
 }
 
+/// Serde default for [`PolicyConfig::system_paths`].
 fn auto() -> String {
     "auto".into()
 }
 
+/// Serde default for [`PolicyConfig::include_workdir`].
 fn yes() -> bool {
     true
 }
+/// Serde default for [`PolicyConfig::enforcement`].
 fn enforce() -> String {
     "enforce".into()
 }
+/// Serde default for [`LintConfig::window`].
 fn window() -> usize {
     8
 }
 
 impl Config {
+    /// Reads and validates the config file at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the file cannot be read or is not valid TOML for [`Config`] (including unknown keys), when
+    /// `policy.enforcement` is not `enforce` or `audit`, when a `scan.comment_leaders` value is not `hash`, `slash` or
+    /// `none`, or when a `providers.expect` entry is not an upper-case environment variable name.
     pub fn load(path: &Path) -> Result<Config> {
         let s =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
@@ -211,6 +239,12 @@ impl Config {
         Ok(c)
     }
 
+    /// Loads `explicit` when given, else `<root>/openshell-annotate.toml` if it exists, else returns the defaults.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the chosen file cannot be loaded (see [`Config::load`]); an explicit path that does not exist is an
+    /// error, a missing default file is not.
     pub fn load_or_default(root: &Path, explicit: Option<&Path>) -> Result<Config> {
         match explicit {
             Some(p) => Config::load(p),

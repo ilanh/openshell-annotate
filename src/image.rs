@@ -16,13 +16,16 @@ pub const BASELINE: &[&str] = &[
     "/sandbox",
 ];
 
+/// The parts of an image's `Config` that say where the application lives.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ImageInfo {
+    /// `WorkingDir`; `None` when unset or empty.
     pub workdir: Option<String>,
     pub entrypoint: Vec<String>,
     pub cmd: Vec<String>,
 }
 
+/// A directory the policy should probably make readable with `@openshell fs read`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proposal {
     /// Directory to make readable.
@@ -32,6 +35,12 @@ pub struct Proposal {
 }
 
 /// Parse the output of `docker image inspect` (a JSON array with one object).
+///
+/// A bare object (not wrapped in an array) is accepted too.
+///
+/// # Errors
+///
+/// Fails when `json` is not valid JSON or has no `Config` object.
 pub fn parse_inspect(json: &str) -> Result<ImageInfo> {
     let v: serde_json::Value =
         serde_json::from_str(json).context("parsing `image inspect` output")?;
@@ -62,6 +71,11 @@ pub fn parse_inspect(json: &str) -> Result<ImageInfo> {
 }
 
 /// `docker image inspect` (or `podman image inspect` when docker is not installed).
+///
+/// # Errors
+///
+/// Fails when neither tool can be run, when the inspect command exits with an error (its stderr is included), or
+/// when its output cannot be parsed (see [`parse_inspect`]).
 pub fn inspect(image: &str) -> Result<ImageInfo> {
     let mut last = String::new();
     for tool in ["docker", "podman"] {
@@ -84,6 +98,7 @@ pub fn inspect(image: &str) -> Result<ImageInfo> {
     bail!("cannot inspect image {image}: no container tool found ({last})")
 }
 
+/// Returns whether `path` is `root` or inside it, comparing whole path components.
 fn under(path: &str, root: &str) -> bool {
     let root = root.trim_end_matches('/');
     path == root || path.starts_with(&format!("{root}/"))
@@ -103,6 +118,9 @@ fn app_root(path: &str) -> String {
 
 /// Directories to make readable: image paths outside the baseline and outside the `declared` `fs read|write` roots.
 /// The image WORKDIR is the sandbox workspace, which `[policy].include_workdir` already grants.
+///
+/// Absolute ENTRYPOINT and CMD arguments without spaces are mapped to their application root; a path proposed for
+/// several reasons is listed once with the reasons joined.
 pub fn propose(info: &ImageInfo, declared: &[String], include_workdir: bool) -> Vec<Proposal> {
     let mut out: Vec<Proposal> = Vec::new();
     let mut add = |path: String, why: String| {
@@ -191,6 +209,13 @@ pub fn app_dirs_from_listing(listing: &str) -> Vec<String> {
 
 /// List the application directories of an image by exporting a throw-away container filesystem (`docker create` +
 /// `docker export | tar -t`); nothing is started. Errors are returned so the caller can fall back to the metadata only.
+///
+/// The container is removed again whether or not the export succeeds.
+///
+/// # Errors
+///
+/// Fails when neither docker nor podman runs, when `create` fails, or when `export | tar -t` cannot be run or exits
+/// with an error.
 pub fn list_app_dirs(image: &str) -> Result<Vec<String>> {
     let tool = ["docker", "podman"]
         .into_iter()
@@ -232,6 +257,7 @@ pub fn add_dirs(props: &mut Vec<Proposal>, dirs: Vec<String>, declared: &[String
     }
 }
 
+/// Renders the stderr note listing the proposals and the `@openshell fs read` lines to add for them.
 pub fn render_note(image: &str, props: &[Proposal]) -> String {
     let mut s = format!(
         "note: image {image} keeps files outside OpenShell's baseline read set ({}); the sandbox cannot read them, and OpenShell 0.1.6 does not log that denial (#4270):\n",
@@ -251,6 +277,10 @@ pub fn render_note(image: &str, props: &[Proposal]) -> String {
 }
 
 /// Load the image info from a file instead of a container tool (used by tests and offline CI).
+///
+/// # Errors
+///
+/// Fails when the file cannot be read or [`parse_inspect`] rejects its content.
 pub fn from_file(path: &Path) -> Result<ImageInfo> {
     parse_inspect(
         &std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?,

@@ -1,10 +1,10 @@
 //! Linter: directive validity + heuristic detection of un-annotated network, filesystem-write,
 //! secret and subprocess call sites.
 //!
-//! Call-site detection is regex based on the lexer's code mask (comments and string contents
-//! blanked), so matches inside strings/comments are ignored. It is a heuristic: dynamic URLs and
-//! SDK-hidden HTTP calls need a directive or `@openshell ignore`. A tree-sitter backend is the planned
-//! upgrade (see docs/design.md).
+//! Call sites come from the tree-sitter extraction in [`crate::ast`] by default. With `[lint] engine = "regex"`, or
+//! when a file cannot be parsed, detection is regex based on the lexer's code mask (comments and string contents
+//! blanked), so matches inside strings/comments are ignored. Either way it is a heuristic: dynamic URLs and
+//! SDK-hidden HTTP calls need a directive or `@openshell ignore`.
 
 use crate::ast::{self, Pth, Site};
 use crate::config::Config;
@@ -17,6 +17,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
+/// Severity of a [`Finding`]; the ordering (errors first) is the report order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
@@ -37,10 +38,14 @@ pub struct Span {
 /// compact one-line format are stable); the rest feeds the human report.
 #[derive(Debug, Clone, Serialize)]
 pub struct Finding {
+    /// Path relative to the root, a policy file path, or `.` for repo-level findings.
     pub file: String,
+    /// 1-based line; `0` when the finding is not about a specific line.
     pub line: usize,
     pub severity: Severity,
+    /// `directive`, `policy`, `net`, `fs`, `env` or `exec`.
     pub category: &'static str,
+    /// Self-contained one-line message, as printed by the compact format.
     pub message: String,
     #[serde(skip)]
     pub span: Option<Span>,
@@ -53,11 +58,13 @@ pub struct Finding {
     /// Suggested fix, usually a copy-pasteable `@openshell` directive (may span lines).
     #[serde(skip)]
     pub help: Option<String>,
+    /// Extra context printed after the help (may span lines).
     #[serde(skip)]
     pub note: Option<String>,
 }
 
 impl Finding {
+    /// Creates a finding with only the serialized fields set.
     pub fn new(
         file: impl Into<String>,
         line: usize,
@@ -78,10 +85,12 @@ impl Finding {
             note: None,
         }
     }
+    /// Sets the span.
     fn at(mut self, span: Option<Span>) -> Self {
         self.span = span;
         self
     }
+    /// Sets the human-report texts: headline, underline label, help and note.
     fn say(
         mut self,
         title: String,
@@ -113,6 +122,7 @@ struct Hints {
 }
 
 impl Hints {
+    /// Uses `#` for Python, shell and the generic `#` languages, `//` otherwise.
     fn new(lang: Language, cfg: &Config) -> Self {
         Hints {
             leader: match lang {
@@ -122,6 +132,7 @@ impl Hints {
             window: cfg.lint.window,
         }
     }
+    /// Returns `d` as a full directive comment line (`# @openshell d`).
     fn dir(&self, d: &str) -> String {
         format!("{} @openshell {d}", self.leader)
     }
@@ -133,9 +144,11 @@ impl Hints {
             .collect::<Vec<_>>()
             .join("\n")
     }
+    /// Returns an `ignore kind=<kind>` directive line.
     fn ignore(&self, kind: &str) -> String {
         self.dir(&format!("ignore kind={kind} reason=\"...\""))
     }
+    /// Adds the human texts for an unannotated network call; `hosts` are its uncovered literal destinations.
     fn net_call(&self, f: Finding, what: &str, hosts: &[String]) -> Finding {
         if hosts.is_empty() {
             let help = format!(
@@ -171,12 +184,14 @@ impl Hints {
             )
         }
     }
+    /// Explains how far a directive's coverage reaches.
     fn cover_note(&self) -> String {
         format!(
             "a directive covers calls on its own line and up to {} lines below it (`scope=file` covers the whole file)",
             self.window
         )
     }
+    /// Adds the human texts for a URL literal whose host no egress directive covers.
     fn url_literal(&self, f: Finding, host: &str, all: &[String]) -> Finding {
         f.say(
             format!("URL literal to {host} has no matching egress"),
@@ -188,6 +203,8 @@ impl Hints {
             None,
         )
     }
+    /// Adds the human texts for a write to a literal path outside every allowed root; the suggested `fs write` names
+    /// the parent directory (or the path itself when it ends in `/`).
     fn fs_literal(&self, f: Finding, what: &str, path: &str) -> Finding {
         let dir = match path.strip_suffix('/') {
             Some(d) if !d.is_empty() => d,
@@ -207,6 +224,7 @@ impl Hints {
             Some("the sandbox may write only under /tmp and the declared `fs write` roots".into()),
         )
     }
+    /// Adds the human texts for a filesystem write found by the regex engine (path unknown).
     fn fs_generic(&self, f: Finding, what: &str) -> Finding {
         f.say(
             format!("{what} without an @openshell directive"),
@@ -219,6 +237,7 @@ impl Hints {
             Some("the sandbox may write only under /tmp and the declared `fs write` roots".into()),
         )
     }
+    /// Adds the human texts for the per-file finding about `n` writes with non-literal paths.
     fn fs_dynamic(&self, f: Finding, n: usize, note: String, with_help: bool) -> Finding {
         let help = with_help.then(|| {
             format!(
@@ -234,6 +253,7 @@ impl Hints {
             Some(note),
         )
     }
+    /// Adds the human texts for a read of a secret-like variable no provider declares.
     fn env(&self, f: Finding, name: &str) -> Finding {
         f.say(
             format!("secret-like variable {name} is read but no provider declares it"),
@@ -246,6 +266,7 @@ impl Hints {
             None,
         )
     }
+    /// Adds the human texts for a subprocess call.
     fn exec(&self, f: Finding, what: &str) -> Finding {
         f.say(
             "subprocess runs a program the policy does not describe".into(),
@@ -270,12 +291,15 @@ fn directive_finding(file: &str, line: usize, message: String) -> Finding {
     f
 }
 
+/// Converts a character offset in `raw` to a [`Span`] starting at its byte column and running to the end of the line.
 fn span_at(raw: &str, char_off: usize) -> Option<Span> {
     raw.char_indices()
         .nth(char_off)
         .map(|(col, _)| Span { col, end: None })
 }
 
+/// Substrings of `/<relative path>` that mark test, fixture, mock and type-declaration files, which call-site lint
+/// always skips.
 const DEFAULT_EXCLUDES: &[&str] = &[
     "/test/",
     "/tests/",
@@ -289,16 +313,24 @@ const DEFAULT_EXCLUDES: &[&str] = &[
     "/e2e/",
 ];
 
+/// One call-site pattern of the regex engine.
 struct Pat {
     cat: &'static str,
+    /// Matched against the code mask of a line.
     code: Regex,
     /// Applied to the raw line from the code match start; must match for a hit.
     raw: Option<Regex>,
     /// Applied to the raw line from the code match start; a match suppresses the hit.
     not_raw: Option<Regex>,
+    /// Short description of the call for messages.
     what: &'static str,
 }
 
+/// Builds a [`Pat`] with only a code regex.
+///
+/// # Panics
+///
+/// Panics if `code` is not a valid regex.
 fn p(cat: &'static str, what: &'static str, code: &str) -> Pat {
     Pat {
         cat,
@@ -309,6 +341,7 @@ fn p(cat: &'static str, what: &'static str, code: &str) -> Pat {
     }
 }
 
+/// Returns the regex-engine patterns for a language, compiled once.
 fn patterns(lang: Language) -> &'static Vec<Pat> {
     static JS: OnceLock<Vec<Pat>> = OnceLock::new();
     static PY: OnceLock<Vec<Pat>> = OnceLock::new();
@@ -371,6 +404,7 @@ fn patterns(lang: Language) -> &'static Vec<Pat> {
     }
 }
 
+/// Returns a regex whose first group captures literal upper-case environment variable names read on a raw line.
 fn env_name_re(lang: Language) -> Regex {
     Regex::new(match lang {
         Language::JavaScript => r#"process\.env(?:\.|\[\s*["'])([A-Z][A-Z0-9_]*)"#,
@@ -384,6 +418,10 @@ fn env_name_re(lang: Language) -> Regex {
     .unwrap()
 }
 
+/// Returns whether an environment variable name looks like a credential.
+///
+/// A `_`-separated part must be `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIALS` or similar, and the last part must
+/// not describe something else (`TOKEN_FILE`, `..._URI`, `..._LIMIT`, `..._TIMEOUT`, ...).
 pub fn secret_like(name: &str) -> bool {
     let parts: Vec<&str> = name.split('_').collect();
     let last = *parts.last().unwrap_or(&"");
@@ -427,6 +465,10 @@ pub fn secret_like(name: &str) -> bool {
     })
 }
 
+/// Returns `host:port` for every `http(s)://` / `ws(s)://` URL in `raw`, with the scheme's default port when none is
+/// given.
+///
+/// Hosts without a dot, `localhost` and `127.*` are skipped; adjacent duplicates are removed.
 pub(crate) fn url_hosts(raw: &str) -> Vec<String> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| {
@@ -452,6 +494,7 @@ pub(crate) fn url_hosts(raw: &str) -> Vec<String> {
     v
 }
 
+/// Returns whether call-site lint skips this file ([`DEFAULT_EXCLUDES`] or `[lint].exclude`).
 fn excluded(rel: &str, cfg: &Config) -> bool {
     let path = format!("/{rel}");
     DEFAULT_EXCLUDES.iter().any(|x| path.contains(x))
@@ -462,6 +505,12 @@ fn excluded(rel: &str, cfg: &Config) -> bool {
             .any(|x| crate::config::path_matches(rel, x))
 }
 
+/// Lints a scan: directive parse and validation errors, then unannotated call sites in every non-excluded file.
+///
+/// A call site is covered by a directive of the matching category in the same file that is `scope=file` or sits at
+/// most `[lint] window` lines above it. With `fs_dynamic = "summary"` the non-literal fs writes of all files are
+/// reported as one repo-level info (only when some `fs write` root is declared). Findings are sorted by severity,
+/// file and line.
 pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
     let mut out = Vec::new();
     for e in &scan.errors {
@@ -671,13 +720,19 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
     out
 }
 
+/// Project-wide declarations the AST lint checks call sites against.
 struct Ctx<'a> {
+    /// Credentials declared by `provider` directives or `[providers].expect`.
     provider_envs: &'a BTreeSet<&'a str>,
+    /// Paths of all `fs write` directives.
     fs_roots: &'a [String],
+    /// Host and ports of all `egress` directives, from any file.
     egress: &'a [(String, Vec<u16>)],
     ignore_hosts: &'a [String],
 }
 
+/// Returns whether `host:port` is in `[lint].ignore_hosts` or matched (wildcards included) by an egress directive
+/// with that port; an unparsable port counts as 443.
 fn host_known(ctx: &Ctx, hp: &str) -> bool {
     let Some((h, p)) = hp.rsplit_once(':') else {
         return false;
@@ -695,6 +750,8 @@ fn host_known(ctx: &Ctx, hp: &str) -> bool {
         .any(|(eh, ports)| crate::diff_logs::host_matches(eh, h) && ports.contains(&p))
 }
 
+/// Returns whether a host is an example, test or local name, or a well-known XML/JSON schema namespace, which URL
+/// literals mention without connecting to.
 fn placeholder_host(hp: &str) -> bool {
     let h = hp.rsplit_once(':').map_or(hp, |x| x.0);
     h.contains("example.")
@@ -708,6 +765,11 @@ fn placeholder_host(hp: &str) -> bool {
 }
 
 /// AST-site lint for one source file.
+///
+/// A network call whose literal URLs are all declared is fine. URL literals (info) are only reported when no network
+/// call is on the same line and once per line, and placeholder hosts are skipped for them. Writes to
+/// a literal path outside the allowed roots are warnings; writes with non-literal paths are collected and reported per
+/// `[lint] fs_dynamic` (always as a warning when no `fs write` root exists), or pushed to `dyn_fs` for the summary.
 #[allow(clippy::too_many_arguments)]
 fn lint_sites(
     src: &Source,
