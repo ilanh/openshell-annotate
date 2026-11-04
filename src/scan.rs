@@ -43,10 +43,26 @@ impl Scan {
         self.unscanned
             .iter()
             .map(|(ext, n)| {
-                format!(
-                    "{n} .{ext} file{} not scanned (no comment syntax known); if its comments start with `#` or `//`, set `[scan.comment_leaders] {ext} = \"hash\"` (or \"slash\") in openshell-annotate.toml to read @openshell comments there",
+                let head = format!(
+                    "{n} .{ext} file{} not scanned",
                     if *n == 1 { " was" } else { "s were" }
-                )
+                );
+                let style = crate::lexer::UNSCANNED_COMMENT_STYLE
+                    .iter()
+                    .find(|(e, _)| e == ext)
+                    .map(|(_, s)| *s);
+                match style {
+                    Some(kind @ ("hash" | "slash")) => format!(
+                        "{head} (no comment leader set); its comments start with `{}`, so set `[scan.comment_leaders] {ext} = \"{kind}\"` in openshell-annotate.toml to read @openshell comments there",
+                        if kind == "hash" { "#" } else { "//" }
+                    ),
+                    Some(leader) => format!(
+                        "{head}: its comments start with `{leader}`, which this tool does not read; put its directives in a `#` comment in a sidecar shell file (for example annotations.sh) and name the source file in the reason"
+                    ),
+                    None => format!(
+                        "{head} (no comment syntax known); if its comments start with `#` or `//`, set `[scan.comment_leaders] {ext} = \"hash\"` (or \"slash\") in openshell-annotate.toml to read @openshell comments there"
+                    ),
+                }
             })
             .collect()
     }
