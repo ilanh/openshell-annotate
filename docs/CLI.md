@@ -152,7 +152,7 @@ Arguments:
 
 Options:
       --policy <POLICY>
-          Also parse and semantically check this policy.yaml
+          Also parse this policy.yaml and check it with the OpenShell gateway validator
 
       --deny-warnings
           Exit 1 on warnings too
@@ -277,7 +277,7 @@ Arguments:
 
 Options:
       --policy <POLICY>
-
+          Committed policy.yaml. Parsed, then checked with the OpenShell gateway validator
 
       --providers <PROVIDERS>
           Also compare a committed providers JSON file

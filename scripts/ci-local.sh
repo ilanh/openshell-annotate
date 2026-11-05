@@ -10,5 +10,6 @@ run() { printf '\n==> %s\n' "$*"; "$@"; }
 run cargo $TC fmt --check
 run cargo $TC clippy --all-targets --locked -- -D warnings
 run cargo $TC test --locked
+run cargo $TC test --locked --test gateway_policies
 run scripts/gen-docs.sh --check
 echo; echo "ci-local: all checks passed"

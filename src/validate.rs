@@ -1,10 +1,11 @@
 //! Validation that mirrors OpenShell's authored-policy rules.
 //!
 //! Authoritative checks live in `openshell-policy-schema` (parsing, unknown fields) and in
-//! `openshell-policy::validate_sandbox_policy` (semantics, protobuf based, not linked here).
-//! This module re-implements the file-level semantic rules documented in
-//! `docs/how-it-works/policies/schema.mdx` (OpenShell v0.1.6) so errors carry directive locations.
-//! `generate` additionally round-trips its output through `openshell_policy_schema::parse_policy`.
+//! [`gateway_violations`], which calls `openshell_policy::validate_and_canonicalize_sandbox_policy`
+//! (OpenShell v0.1.6, the same tag as the schema crate). This module also re-implements the
+//! file-level semantic rules documented in `docs/how-it-works/policies/schema.mdx` so errors carry
+//! directive locations. `generate` round-trips its output through `parse_policy` and the gateway
+//! validator.
 
 use crate::directive::{Directive, Kind};
 use openshell_policy_schema::PolicyDocument;
@@ -419,6 +420,31 @@ pub fn check_document(doc: &PolicyDocument) -> (Vec<String>, Vec<String>) {
         }
     }
     (errs, warns)
+}
+
+/// Formats a miette report and its whole cause chain on one line, joined with `: `.
+pub fn miette_str(e: &miette::Report) -> String {
+    e.chain()
+        .map(|c| c.to_string())
+        .collect::<Vec<_>>()
+        .join(": ")
+}
+
+/// Runs the OpenShell gateway validator on an authored policy.
+///
+/// `Ok(empty)` means `validate_and_canonicalize_sandbox_policy` accepted it. `Ok(messages)` are
+/// the violation strings (the same text the gateway reports). `Err` is a parse or conversion
+/// failure.
+///
+/// # Errors
+///
+/// Returns the parse error when the YAML is not a sandbox policy the gateway can load.
+pub fn gateway_violations(yaml: &str) -> Result<Vec<String>, String> {
+    let policy = openshell_policy::parse_sandbox_policy(yaml).map_err(|e| miette_str(&e))?;
+    match openshell_policy::validate_and_canonicalize_sandbox_policy(policy) {
+        Ok(_) => Ok(Vec::new()),
+        Err(e) => Ok(e.violations().iter().map(ToString::to_string).collect()),
+    }
 }
 
 #[cfg(test)]
