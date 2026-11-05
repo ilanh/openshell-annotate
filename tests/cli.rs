@@ -464,6 +464,67 @@ fn generate_rejects_http_method_as_graphql_operation_type() {
     );
 }
 
+#[test]
+fn l7_protocol_without_rules_or_access_is_a_directive_error() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(
+        t.path().join("stream.dart"),
+        "// @openshell egress stream.example.com:443 reason=\"live event stream\" protocol=websocket\n",
+    )
+    .unwrap();
+    std::fs::write(
+        t.path().join("api.js"),
+        "// @openshell egress api.example.com:443 reason=\"rest\" protocol=rest\n\
+         // @openshell egress gql.example.com:443 reason=\"graphql\" protocol=graphql\n\
+         // @openshell egress db.internal.example:5432 reason=\"tcp\" protocol=tcp bin=/usr/bin/psql\n\
+         // @openshell egress ok.example.com:443 reason=\"websocket reads\" protocol=websocket access=read-only bin=/usr/bin/dart\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["generate"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let e = err(&o);
+    for (loc, proto) in [
+        ("stream.dart:1:", "websocket"),
+        ("api.js:1:", "rest"),
+        ("api.js:2:", "graphql"),
+    ] {
+        assert!(
+            e.contains(loc) && e.contains(&format!("protocol {proto} requires allow=")),
+            "{e}"
+        );
+    }
+    assert!(
+        !e.contains("protocol tcp requires"),
+        "tcp does not need rules or access: {e}"
+    );
+    let lint = run(t.path(), &["lint", "--format", "compact"]);
+    let s = out(&lint);
+    assert!(
+        s.contains("stream.dart:1: error[directive]: protocol websocket requires allow="),
+        "{s}"
+    );
+    std::fs::write(
+        t.path().join("stream.dart"),
+        "// @openshell egress stream.example.com:443 reason=\"live event stream\" protocol=websocket access=read-only bin=/usr/bin/dart\n",
+    )
+    .unwrap();
+    std::fs::write(
+        t.path().join("api.js"),
+        "// @openshell egress db.internal.example:5432 reason=\"tcp\" protocol=tcp bin=/usr/bin/psql\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["generate", "-o", "p.yaml"]);
+    assert!(o.status.success(), "{}", err(&o));
+    let y = std::fs::read_to_string(t.path().join("p.yaml")).unwrap();
+    let stream = endpoint_block(&y, "stream.example.com");
+    assert!(stream.contains("protocol: websocket"), "{stream}");
+    assert!(stream.contains("access: read-only"), "{stream}");
+    let tcp = endpoint_block(&y, "db.internal.example");
+    assert!(tcp.contains("protocol: tcp"), "{tcp}");
+    assert!(!tcp.contains("access:"), "{tcp}");
+    assert!(!tcp.contains("rules:"), "{tcp}");
+}
+
 fn endpoint_block(policy: &str, host: &str) -> String {
     let marker = format!("- host: \"{host}\"");
     let at = policy

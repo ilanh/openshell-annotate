@@ -7,6 +7,7 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 - fix(generate): MCP endpoints emit `mcp.allow_all_known_mcp_methods` instead of an access preset
 - fix(generate): emit `operation_type` only on GraphQL rules, and only as query, mutation, or subscription
+- fix(generate): reject `rest`, `websocket`, and `graphql` directives that set neither rules nor an access preset
 
 ## [0.1.0-rc.2] - 2026-11-04
 

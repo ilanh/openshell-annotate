@@ -248,6 +248,17 @@ pub fn check_directive(d: &Directive) -> Vec<String> {
                         .into(),
                 );
             }
+            if let Some(p) = d.attr("protocol") {
+                if matches!(p, "rest" | "websocket" | "graphql")
+                    && allows.is_empty()
+                    && denies.is_empty()
+                    && d.attr("access").is_none()
+                {
+                    e.push(format!(
+                        "protocol {p} requires allow= rules or an access preset to define allowed traffic"
+                    ));
+                }
+            }
             let inspected = d.attr("access").is_some() || !allows.is_empty() || !denies.is_empty();
             if inspected && d.attr("protocol") == Some("tcp") {
                 e.push(
