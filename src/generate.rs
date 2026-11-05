@@ -56,6 +56,9 @@ pub fn miette_str(e: &miette::Report) -> String {
 struct Spec {
     protocol: Option<String>,
     access: Option<String>,
+    /// `protocol=mcp` plus `access=` — MCP rejects access presets, so this is emitted as
+    /// `mcp.allow_all_known_mcp_methods: true` instead of `access`.
+    mcp_allow_all: bool,
     /// Only set for inspected (non-`tcp`) protocols.
     enforcement: Option<String>,
     tls: Option<String>,
@@ -134,7 +137,7 @@ fn spec_of(d: &Directive, cfg: &Config) -> Spec {
         .get("deny")
         .map(|v| v.iter().map(|s| split_rule(s)).collect())
         .unwrap_or_default();
-    let access = d.attr("access").map(str::to_string);
+    let mut access = d.attr("access").map(str::to_string);
     let inspected = access.is_some() || !allow.is_empty() || !deny.is_empty();
     let tls = d.attr("tls").map(str::to_string);
     let protocol = match d.attr("protocol") {
@@ -142,6 +145,12 @@ fn spec_of(d: &Directive, cfg: &Config) -> Spec {
         None if inspected => Some("rest".to_string()),
         None => None,
     };
+    // MCP has no access presets. An `access=` value is the allow-all form, emitted as
+    // `mcp.allow_all_known_mcp_methods` rather than `access`.
+    let mcp_allow_all = protocol.as_deref() == Some("mcp") && access.is_some();
+    if mcp_allow_all {
+        access = None;
+    }
     let enforcement = match protocol.as_deref() {
         Some("tcp") | None => None,
         Some(_) => Some(
@@ -153,6 +162,7 @@ fn spec_of(d: &Directive, cfg: &Config) -> Spec {
     Spec {
         protocol,
         access,
+        mcp_allow_all,
         enforcement,
         tls,
         allow,
@@ -649,6 +659,9 @@ pub fn generate(
             }
             if let Some(a) = &s.access {
                 y.push_str(&format!("        access: {a}\n"));
+            }
+            if s.mcp_allow_all {
+                y.push_str("        mcp:\n          allow_all_known_mcp_methods: true\n");
             }
             if !s.allow.is_empty() {
                 y.push_str("        rules:\n");

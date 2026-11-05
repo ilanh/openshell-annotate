@@ -198,6 +198,16 @@ pub fn check_directive(d: &Directive) -> Vec<String> {
             if d.attr("access").is_some() && !allows.is_empty() {
                 e.push("`access` and `allow` are mutually exclusive in OpenShell (access presets vs explicit rules)".into());
             }
+            if d.attr("protocol") == Some("mcp")
+                && allows.is_empty()
+                && denies.is_empty()
+                && d.attr("access").is_none()
+            {
+                e.push(
+                    "protocol mcp needs allow= rules or access= (access is emitted as mcp.allow_all_known_mcp_methods: true, never as an access preset)"
+                        .into(),
+                );
+            }
             let inspected = d.attr("access").is_some() || !allows.is_empty() || !denies.is_empty();
             if inspected && d.attr("protocol") == Some("tcp") {
                 e.push(

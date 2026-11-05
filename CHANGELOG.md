@@ -5,6 +5,8 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+- fix(generate): MCP endpoints emit `mcp.allow_all_known_mcp_methods` instead of an access preset
+
 ## [0.1.0-rc.2] - 2026-11-04
 
 Merged pull requests since v0.1.0-rc.1:

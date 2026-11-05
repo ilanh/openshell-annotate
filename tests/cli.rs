@@ -362,6 +362,67 @@ fn generate_rejects_invalid_directives_with_locations() {
 }
 
 #[test]
+fn generate_mcp_emits_allow_all_known_methods_instead_of_an_access_preset() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(
+        t.path().join("mcp.js"),
+        "// @openshell egress mcp.example.com:443 reason=\"sample MCP server\" protocol=mcp access=read-write bin=/usr/bin/java\n\
+         // @openshell egress api.example.com:443 reason=\"rest still uses a preset\" access=read-only bin=/usr/bin/curl\n\
+         // @openshell egress tools.example.com:443 reason=\"one MCP method\" protocol=mcp allow=\"POST:/rpc\" bin=/usr/bin/java\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["generate", "-o", "p.yaml"]);
+    assert!(o.status.success(), "{}", err(&o));
+    let y = std::fs::read_to_string(t.path().join("p.yaml")).unwrap();
+    let mcp = endpoint_block(&y, "mcp.example.com");
+    assert!(mcp.contains("protocol: mcp"), "{mcp}");
+    assert!(mcp.contains("allow_all_known_mcp_methods: true"), "{mcp}");
+    assert!(!mcp.contains("access:"), "{mcp}");
+    let rest = endpoint_block(&y, "api.example.com");
+    assert!(rest.contains("access: read-only"), "{rest}");
+    assert!(!rest.contains("allow_all_known_mcp_methods"), "{rest}");
+    let ruled = endpoint_block(&y, "tools.example.com");
+    assert!(ruled.contains("protocol: mcp"), "{ruled}");
+    assert!(ruled.contains("method: \"POST\""), "{ruled}");
+    assert!(!ruled.contains("access:"), "{ruled}");
+    assert!(!ruled.contains("allow_all_known_mcp_methods"), "{ruled}");
+    let doc = openshell_policy_schema::parse_policy(&y).unwrap();
+    let ep = &doc.network_policies["mcp_example_com"].endpoints[0];
+    assert!(ep.access.is_empty(), "{ep:?}");
+    assert_eq!(
+        ep.mcp.as_ref().and_then(|m| m.allow_all_known_mcp_methods),
+        Some(true)
+    );
+}
+
+#[test]
+fn generate_rejects_mcp_with_neither_rules_nor_access() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(
+        t.path().join("mcp.js"),
+        "// @openshell egress bare.example.com:443 reason=\"mcp needs a grant\" protocol=mcp bin=/usr/bin/java\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["generate"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let e = err(&o);
+    assert!(
+        e.contains("mcp.js:1:") && e.contains("mcp.allow_all_known_mcp_methods"),
+        "{e}"
+    );
+}
+
+fn endpoint_block(policy: &str, host: &str) -> String {
+    let marker = format!("- host: \"{host}\"");
+    let at = policy
+        .find(&marker)
+        .unwrap_or_else(|| panic!("no endpoint for {host}: {policy}"));
+    let ep = &policy[at..];
+    let next = ep[1..].find("\n      - host:").map_or(ep.len(), |i| i + 1);
+    ep[..next].to_string()
+}
+
+#[test]
 fn generate_requires_a_binary_when_unknown() {
     let t = fixture();
     std::fs::remove_file(t.path().join("openshell-annotate.toml")).unwrap();

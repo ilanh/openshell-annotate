@@ -73,8 +73,8 @@ pub const VERBS: &[VerbSpec] = &[
         summary: "Allow outbound network access to a host and port(s).",
         args: &[("host:port[,port...]", "Destination. A port is mandatory (OpenShell rejects endpoints without one); the host is lower-cased.")],
         attrs: &[
-            AttrSpec { name: "access", multi: false, values: "read-only | read-write | full", help: "OpenShell access preset; turns on request inspection (protocol defaults to `rest`). Mutually exclusive with `allow`." },
-            AttrSpec { name: "protocol", multi: false, values: "rest | websocket | graphql | mcp | json-rpc | tcp", help: "L7 protocol. `tcp` is uninspected L4 and cannot be combined with `access`/`allow`/`deny`." },
+            AttrSpec { name: "access", multi: false, values: "read-only | read-write | full", help: "OpenShell access preset; turns on request inspection (protocol defaults to `rest`). Mutually exclusive with `allow`. For `protocol=mcp` the preset is not written out (MCP rejects access presets); it is emitted as `mcp.allow_all_known_mcp_methods: true`." },
+            AttrSpec { name: "protocol", multi: false, values: "rest | websocket | graphql | mcp | json-rpc | tcp", help: "L7 protocol. `tcp` is uninspected L4 and cannot be combined with `access`/`allow`/`deny`. `mcp` never emits `access`; an `access` value becomes `mcp.allow_all_known_mcp_methods: true`." },
             AttrSpec { name: "enforce", multi: false, values: "enforce | audit", help: "Enforcement mode for inspected endpoints (default from `[policy] enforcement`, itself defaulting to `enforce`)." },
             AttrSpec { name: "allow", multi: true, values: "METHOD:/path", help: "Explicit allowed request, e.g. `GET:/v1/**`. Repeatable. Implies inspection." },
             AttrSpec { name: "deny", multi: true, values: "METHOD:/path", help: "Request subtracted from what is allowed. Repeatable; needs `allow` or `access`." },
@@ -84,7 +84,7 @@ pub const VERBS: &[VerbSpec] = &[
         ],
         reason_required: true,
         covers: "net",
-        emits: "`network_policies.<rule>.endpoints[]` (`host`, `port`/`ports`, `protocol`, `enforcement`, `access` or `rules`/`deny_rules`) plus `binaries[]`.",
+        emits: "`network_policies.<rule>.endpoints[]` (`host`, `port`/`ports`, `protocol`, `enforcement`, `access` or `rules`/`deny_rules`, or `mcp.allow_all_known_mcp_methods` for MCP) plus `binaries[]`.",
     },
     VerbSpec {
         verb: "provider",
