@@ -121,7 +121,7 @@ git clone https://github.com/o/r.git /workspace/r
 ```
 openshell-annotate scan --format compact                  # every directive with file:line; parse errors fail here (`human` is the default and longer; parse compact or --json)
 openshell-annotate generate -o openshell/policy.yaml --providers-out openshell/providers.sh
-openshell-annotate lint --format compact --policy openshell/policy.yaml    # directive errors + remaining unannotated calls + policy sanity
+openshell-annotate lint --format compact --policy openshell/policy.yaml    # directive errors + remaining unannotated calls + the OpenShell gateway validator
 openshell-annotate drift --policy openshell/policy.yaml   # must say "no drift" after generate
 ```
 

@@ -525,6 +525,69 @@ fn l7_protocol_without_rules_or_access_is_a_directive_error() {
     assert!(!tcp.contains("rules:"), "{tcp}");
 }
 
+#[test]
+fn generate_rejects_a_policy_the_gateway_rejects() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(
+        t.path().join("rpc.js"),
+        "// @openshell egress rpc.example.net:443 reason=\"rpc\" protocol=json-rpc access=full bin=/usr/bin/curl\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["generate"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let e = err(&o);
+    assert!(
+        e.contains("gateway validation") && e.contains("does not support access presets"),
+        "{e}"
+    );
+}
+
+#[test]
+fn lint_policy_reports_gateway_violations_schema_accepts() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("a.js"), "console.log(1)\n").unwrap();
+    std::fs::write(
+        t.path().join("bad.yaml"),
+        "version: 1\nnetwork_policies:\n  mcp_example_com:\n    endpoints:\n      - host: mcp.example.com\n        port: 443\n        protocol: mcp\n        access: read-write\n    binaries:\n      - path: /usr/bin/java\n",
+    )
+    .unwrap();
+    let o = run(
+        t.path(),
+        &["lint", "--format", "compact", "--policy", "bad.yaml"],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let s = out(&o);
+    assert!(
+        s.contains("does not support access presets"),
+        "schema-only lint would accept this file: {s}"
+    );
+    assert!(openshell_policy_schema::parse_policy(
+        &std::fs::read_to_string(t.path().join("bad.yaml")).unwrap()
+    )
+    .is_ok());
+}
+
+#[test]
+fn drift_rejects_a_committed_policy_the_gateway_rejects() {
+    let t = fixture();
+    assert!(run(t.path(), &["generate", "-o", "policy.yaml"])
+        .status
+        .success());
+    let y = std::fs::read_to_string(t.path().join("policy.yaml")).unwrap();
+    let y = y.replace(
+        "protocol: rest\n        enforcement: enforce\n        access: read-write\n",
+        "protocol: mcp\n        enforcement: enforce\n        access: read-write\n",
+    );
+    std::fs::write(t.path().join("policy.yaml"), y).unwrap();
+    let o = run(t.path(), &["drift", "--policy", "policy.yaml"]);
+    assert_eq!(o.status.code(), Some(1), "{}{}", out(&o), err(&o));
+    assert!(
+        err(&o).contains("does not support access presets"),
+        "{}",
+        err(&o)
+    );
+}
+
 fn endpoint_block(policy: &str, host: &str) -> String {
     let marker = format!("- host: \"{host}\"");
     let at = policy
@@ -1673,8 +1736,9 @@ fn lint_human_handles_policy_files_long_lines_tabs_and_project_wide_findings() {
         ],
         &[],
     ));
+    assert!(s.contains("bad.yaml  (3 findings)"), "{s}");
     assert!(
-        s.contains("bad.yaml  (2 findings)") || s.contains("bad.yaml  (1 finding)"),
+        s.contains("TLD wildcard") && s.contains("three DNS labels"),
         "{s}"
     );
     assert!(

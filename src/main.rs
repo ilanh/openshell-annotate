@@ -114,7 +114,7 @@ enum Cmd {
     Lint {
         /// Files or directories to process (default: the whole root).
         paths: Vec<PathBuf>,
-        /// Also parse and semantically check this policy.yaml.
+        /// Also parse this policy.yaml and check it with the OpenShell gateway validator.
         #[arg(long)]
         policy: Option<PathBuf>,
         /// Exit 1 on warnings too.
@@ -159,6 +159,7 @@ enum Cmd {
     Drift {
         /// Files or directories to process (default: the whole root).
         paths: Vec<PathBuf>,
+        /// Committed policy.yaml. Parsed, then checked with the OpenShell gateway validator.
         #[arg(long)]
         policy: PathBuf,
         /// Also compare a committed providers JSON file.
@@ -566,7 +567,11 @@ fn run(cli: Cli) -> Result<ExitCode> {
                     .with_context(|| format!("reading {}", p.display()))?;
                 match openshell_policy_schema::parse_policy(&text) {
                     Ok(doc) => {
-                        let (errs, warns) = validate::check_document(&doc);
+                        let (mut errs, warns) = validate::check_document(&doc);
+                        match validate::gateway_violations(&text) {
+                            Ok(vs) => errs.extend(vs),
+                            Err(e) => errs.push(e),
+                        }
                         for (v, sev) in errs
                             .into_iter()
                             .map(|e| (e, Severity::Error))
@@ -755,6 +760,19 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 .with_context(|| format!("reading {}", policy.display()))?;
             let committed = openshell_policy_schema::parse_policy(&text)
                 .map_err(|e| anyhow::anyhow!("{}: {}", policy.display(), miette_str(&e)))?;
+            match validate::gateway_violations(&text) {
+                Ok(vs) if vs.is_empty() => {}
+                Ok(vs) => {
+                    for v in vs {
+                        eprintln!("error: {}: {v}", policy.display());
+                    }
+                    return Ok(ExitCode::from(1));
+                }
+                Err(e) => {
+                    eprintln!("error: {}: {e}", policy.display());
+                    return Ok(ExitCode::from(1));
+                }
+            }
             let mut rep = drift::compare(&g.doc, &committed, strict);
             if let Some(pf) = prov_file {
                 let v: serde_json::Value = serde_json::from_str(

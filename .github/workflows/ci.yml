@@ -31,6 +31,8 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: test
         run: cargo test --locked
+      - name: validate example and golden policies
+        run: cargo test --locked --test gateway_policies
       - name: docs are up to date
         run: scripts/gen-docs.sh --check
 
