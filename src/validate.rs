@@ -129,6 +129,35 @@ fn check_allow(s: &str, what: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Checks a GraphQL `allow=` / `deny=` value: `query`, `mutation`, or `subscription`, optionally
+/// `:operationName`. `operation_type` is GraphQL-only, so other protocols keep [`check_allow`].
+fn check_graphql_op(s: &str, what: &str) -> Result<(), String> {
+    let (op, name) = match s.split_once(':') {
+        Some((op, name)) => (op, name),
+        None => (s, ""),
+    };
+    if !matches!(op, "query" | "mutation" | "subscription") {
+        return Err(format!(
+            "{what}=\"{s}\": graphql operation_type must be query, mutation, or subscription"
+        ));
+    }
+    if s.contains(':') && !graphql_name(name) {
+        return Err(format!(
+            "{what}=\"{s}\": graphql operation name must match [_A-Za-z][_0-9A-Za-z]*"
+        ));
+    }
+    Ok(())
+}
+
+fn graphql_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(c) if c == '_' || c.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
+}
+
 /// Directive-level checks (location is prepended by callers).
 pub fn check_directive(d: &Directive) -> Vec<String> {
     let mut e = Vec::new();
@@ -185,13 +214,24 @@ pub fn check_directive(d: &Directive) -> Vec<String> {
             }
             let allows = d.attrs.multi.get("allow").map(Vec::as_slice).unwrap_or(&[]);
             let denies = d.attrs.multi.get("deny").map(Vec::as_slice).unwrap_or(&[]);
+            let graphql = d.attr("protocol") == Some("graphql");
             for a in allows {
-                if let Err(m) = check_allow(a, "allow") {
+                let check = if graphql {
+                    check_graphql_op(a, "allow")
+                } else {
+                    check_allow(a, "allow")
+                };
+                if let Err(m) = check {
                     e.push(m);
                 }
             }
             for a in denies {
-                if let Err(m) = check_allow(a, "deny") {
+                let check = if graphql {
+                    check_graphql_op(a, "deny")
+                } else {
+                    check_allow(a, "deny")
+                };
+                if let Err(m) = check {
                     e.push(m);
                 }
             }
@@ -415,5 +455,11 @@ mod tests {
         assert!(check_allow("get:/x", "allow").is_err());
         assert!(check_allow("GET", "allow").is_err());
         assert!(check_allow("GET:v1", "allow").is_err());
+        assert!(check_graphql_op("query", "allow").is_ok());
+        assert!(check_graphql_op("mutation:CreateIssue", "allow").is_ok());
+        assert!(check_graphql_op("subscription", "deny").is_ok());
+        assert!(check_graphql_op("POST:/graphql", "allow").is_err());
+        assert!(check_graphql_op("query:", "allow").is_err());
+        assert!(check_graphql_op("query:/path", "allow").is_err());
     }
 }

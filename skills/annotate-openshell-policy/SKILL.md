@@ -73,6 +73,8 @@ Rules of thumb (least privilege):
    `allow="POST:/v1/chat/completions"` rules when the API surface is small. Use `access=full` only when
    needed and say why. For `protocol=mcp`, `access=` is allow-all: the policy gets
    `mcp.allow_all_known_mcp_methods: true` and no `access:` preset. Use `allow=` rules to list requests instead.
+   For `protocol=graphql`, `allow` and `deny` are `query`, `mutation`, or `subscription` (optionally
+   `:operationName`), not HTTP methods.
    Avoid wildcards; if unavoidable use `*.example.com` (>= 3 labels, never `*.com`).
    One host per directive: `host:443` or `host:443,8443` (ports only). There is no comma-separated host list, so
    `pypi.org:443,files.pythonhosted.org:443` is an error: write one `egress` line per host.
