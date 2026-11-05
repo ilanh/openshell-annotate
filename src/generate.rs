@@ -62,10 +62,21 @@ struct Spec {
     /// Only set for inspected (non-`tcp`) protocols.
     enforcement: Option<String>,
     tls: Option<String>,
-    /// `(method, path)` pairs from `allow=`.
-    allow: Vec<(String, String)>,
-    /// `(method, path)` pairs from `deny=`.
-    deny: Vec<(String, String)>,
+    /// Clauses from `allow=`. HTTP rules fill method and path; GraphQL rules fill operation type.
+    allow: Vec<L7Clause>,
+    /// Clauses from `deny=`. HTTP rules fill method and path; GraphQL rules fill operation type.
+    deny: Vec<L7Clause>,
+}
+
+/// One `allow=` / `deny=` clause. HTTP clauses set method and path. GraphQL clauses set
+/// `operation_type` (and optionally `operation_name`) and leave method and path empty, so
+/// `operation_type` is never emitted for any other protocol.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct L7Clause {
+    method: String,
+    path: String,
+    operation_type: String,
+    operation_name: String,
 }
 
 /// One endpoint being assembled: its settings and every directive that asks for it.
@@ -111,9 +122,55 @@ pub(crate) fn slug(host: &str) -> String {
 /// # Panics
 ///
 /// Panics if `s` has no `:`; [`validate::check_directive`] rejects such values before generation.
-fn split_rule(s: &str) -> (String, String) {
+fn http_clause(s: &str) -> L7Clause {
     let (m, p) = s.split_once(':').unwrap();
-    (m.to_string(), p.to_string())
+    L7Clause {
+        method: m.to_string(),
+        path: p.to_string(),
+        operation_type: String::new(),
+        operation_name: String::new(),
+    }
+}
+
+/// Splits a validated GraphQL `operation_type` or `operation_type:operationName` value.
+///
+/// [`validate::check_directive`] only lets `query`, `mutation`, or `subscription` through, with an
+/// optional GraphQL operation name.
+fn graphql_clause(s: &str) -> L7Clause {
+    let (op, name) = match s.split_once(':') {
+        Some((op, name)) => (op, name),
+        None => (s, ""),
+    };
+    L7Clause {
+        method: String::new(),
+        path: String::new(),
+        operation_type: op.to_string(),
+        operation_name: name.to_string(),
+    }
+}
+
+/// Writes the fields of one allow or deny clause. `first` is the prefix of the first field
+/// (for a deny rule that is `          - `) and `rest` prefixes every later field.
+fn push_clause_fields(rule: &L7Clause, first: &str, rest: &str, y: &mut String) {
+    let mut leading = first;
+    let mut push = |text: String| {
+        y.push_str(leading);
+        y.push_str(&text);
+        y.push('\n');
+        leading = rest;
+    };
+    if !rule.method.is_empty() {
+        push(format!("method: {}", qs(&rule.method)));
+    }
+    if !rule.path.is_empty() {
+        push(format!("path: {}", qs(&rule.path)));
+    }
+    if !rule.operation_type.is_empty() {
+        push(format!("operation_type: {}", qs(&rule.operation_type)));
+    }
+    if !rule.operation_name.is_empty() {
+        push(format!("operation_name: {}", qs(&rule.operation_name)));
+    }
 }
 
 /// Builds the endpoint settings of an egress directive.
@@ -123,19 +180,28 @@ fn split_rule(s: &str) -> (String, String) {
 ///
 /// # Panics
 ///
-/// Panics (via [`split_rule`]) on an `allow`/`deny` value without `:`, which validation rules out.
+/// Panics (via [`http_clause`]) on an HTTP `allow`/`deny` value without `:`, which validation rules out.
+/// GraphQL clauses are `query`, `mutation`, or `subscription`, with an optional `:operationName`.
 fn spec_of(d: &Directive, cfg: &Config) -> Spec {
+    let graphql = d.attr("protocol") == Some("graphql");
+    let clause = |s: &String| {
+        if graphql {
+            graphql_clause(s)
+        } else {
+            http_clause(s)
+        }
+    };
     let allow: Vec<_> = d
         .attrs
         .multi
         .get("allow")
-        .map(|v| v.iter().map(|s| split_rule(s)).collect())
+        .map(|v| v.iter().map(clause).collect())
         .unwrap_or_default();
     let deny: Vec<_> = d
         .attrs
         .multi
         .get("deny")
-        .map(|v| v.iter().map(|s| split_rule(s)).collect())
+        .map(|v| v.iter().map(clause).collect())
         .unwrap_or_default();
     let mut access = d.attr("access").map(str::to_string);
     let inspected = access.is_some() || !allow.is_empty() || !deny.is_empty();
@@ -665,22 +731,15 @@ pub fn generate(
             }
             if !s.allow.is_empty() {
                 y.push_str("        rules:\n");
-                for (m, p) in &s.allow {
-                    y.push_str(&format!(
-                        "          - allow:\n              method: {}\n              path: {}\n",
-                        qs(m),
-                        qs(p)
-                    ));
+                for rule in &s.allow {
+                    y.push_str("          - allow:\n");
+                    push_clause_fields(rule, "              ", "              ", &mut y);
                 }
             }
             if !s.deny.is_empty() {
                 y.push_str("        deny_rules:\n");
-                for (m, p) in &s.deny {
-                    y.push_str(&format!(
-                        "          - method: {}\n            path: {}\n",
-                        qs(m),
-                        qs(p)
-                    ));
+                for rule in &s.deny {
+                    push_clause_fields(rule, "          - ", "            ", &mut y);
                 }
             }
         }

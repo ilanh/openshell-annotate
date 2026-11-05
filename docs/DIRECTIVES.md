@@ -60,8 +60,8 @@ Attributes:
 | `access` | `read-only \| read-write \| full` | no | OpenShell access preset; turns on request inspection (protocol defaults to `rest`). Mutually exclusive with `allow`. For `protocol=mcp` the preset is not written out (MCP rejects access presets); it is emitted as `mcp.allow_all_known_mcp_methods: true`. |
 | `protocol` | `rest \| websocket \| graphql \| mcp \| json-rpc \| tcp` | no | L7 protocol. `tcp` is uninspected L4 and cannot be combined with `access`/`allow`/`deny`. `mcp` never emits `access`; an `access` value becomes `mcp.allow_all_known_mcp_methods: true`. |
 | `enforce` | `enforce \| audit` | no | Enforcement mode for inspected endpoints (default from `[policy] enforcement`, itself defaulting to `enforce`). |
-| `allow` | `METHOD:/path` | yes | Explicit allowed request, e.g. `GET:/v1/**`. Repeatable. Implies inspection. |
-| `deny` | `METHOD:/path` | yes | Request subtracted from what is allowed. Repeatable; needs `allow` or `access`. |
+| `allow` | `METHOD:/path \| query \| mutation \| subscription` | yes | Explicit allowed request, e.g. `GET:/v1/**`. Repeatable. Implies inspection. For `protocol=graphql` the value is `query`, `mutation`, or `subscription`, optionally `:operationName`. That is emitted as `rules[].allow.operation_type` and only for GraphQL. |
+| `deny` | `METHOD:/path \| query \| mutation \| subscription` | yes | Request subtracted from what is allowed. Repeatable; needs `allow` or `access`. For `protocol=graphql` the value is an operation type (`query`, `mutation`, or `subscription`), emitted as `deny_rules[].operation_type` and only for GraphQL. |
 | `bin` | `/absolute/real/path` | no | Binary that opens the connection. Overrides the nearest `@openshell bin` and `[languages]` in the config. |
 | `rule` | `[A-Za-z0-9_-]+` | no | Name of the `network_policies` entry (default: slug of the host). Must not start with `_provider_`. |
 | `tls` | `skip` | no | Relay without TLS termination. Cannot be combined with request inspection. Use it for clients that do not trust the OpenShell CA. `openshell-prover check` reported such policies as `unsupported` with OpenShell 0.1.6 (tracked in #19). |
