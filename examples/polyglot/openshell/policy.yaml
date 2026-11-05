@@ -396,6 +396,7 @@ network_policies:
         port: 443
         protocol: websocket
         enforcement: enforce
+        access: read-only
     binaries:
       - path: "/usr/bin/dart"  # [languages].dart default
   vpm_vlang_io:
