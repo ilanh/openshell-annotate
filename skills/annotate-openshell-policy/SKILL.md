@@ -71,7 +71,9 @@ Rules of thumb (least privilege):
    Never put secrets, tokens or customer data in a reason or any directive.
 2. Literal host and port, e.g. `api.openai.com:443`. Add `access=read-only` for read-only APIs, or
    `allow="POST:/v1/chat/completions"` rules when the API surface is small. Use `access=full` only when
-   needed and say why. Avoid wildcards; if unavoidable use `*.example.com` (>= 3 labels, never `*.com`).
+   needed and say why. For `protocol=mcp`, `access=` is allow-all: the policy gets
+   `mcp.allow_all_known_mcp_methods: true` and no `access:` preset. Use `allow=` rules to list requests instead.
+   Avoid wildcards; if unavoidable use `*.example.com` (>= 3 labels, never `*.com`).
    One host per directive: `host:443` or `host:443,8443` (ports only). There is no comma-separated host list, so
    `pypi.org:443,files.pythonhosted.org:443` is an error: write one `egress` line per host.
 3. Binary: rely on `[languages]` for the usual interpreter. Use `bin=` when a subprocess makes the call

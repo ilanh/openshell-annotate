@@ -57,8 +57,8 @@ Attributes:
 
 | Attribute | Values | Repeatable | Meaning |
 |---|---|---|---|
-| `access` | `read-only \| read-write \| full` | no | OpenShell access preset; turns on request inspection (protocol defaults to `rest`). Mutually exclusive with `allow`. |
-| `protocol` | `rest \| websocket \| graphql \| mcp \| json-rpc \| tcp` | no | L7 protocol. `tcp` is uninspected L4 and cannot be combined with `access`/`allow`/`deny`. |
+| `access` | `read-only \| read-write \| full` | no | OpenShell access preset; turns on request inspection (protocol defaults to `rest`). Mutually exclusive with `allow`. For `protocol=mcp` the preset is not written out (MCP rejects access presets); it is emitted as `mcp.allow_all_known_mcp_methods: true`. |
+| `protocol` | `rest \| websocket \| graphql \| mcp \| json-rpc \| tcp` | no | L7 protocol. `tcp` is uninspected L4 and cannot be combined with `access`/`allow`/`deny`. `mcp` never emits `access`; an `access` value becomes `mcp.allow_all_known_mcp_methods: true`. |
 | `enforce` | `enforce \| audit` | no | Enforcement mode for inspected endpoints (default from `[policy] enforcement`, itself defaulting to `enforce`). |
 | `allow` | `METHOD:/path` | yes | Explicit allowed request, e.g. `GET:/v1/**`. Repeatable. Implies inspection. |
 | `deny` | `METHOD:/path` | yes | Request subtracted from what is allowed. Repeatable; needs `allow` or `access`. |
@@ -68,7 +68,7 @@ Attributes:
 
 `reason` is required.
 
-**Becomes:** `network_policies.<rule>.endpoints[]` (`host`, `port`/`ports`, `protocol`, `enforcement`, `access` or `rules`/`deny_rules`) plus `binaries[]`.
+**Becomes:** `network_policies.<rule>.endpoints[]` (`host`, `port`/`ports`, `protocol`, `enforcement`, `access` or `rules`/`deny_rules`, or `mcp.allow_all_known_mcp_methods` for MCP) plus `binaries[]`.
 
 ## provider
 

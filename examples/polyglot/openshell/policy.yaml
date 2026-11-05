@@ -199,7 +199,8 @@ network_policies:
         port: 443
         protocol: mcp
         enforcement: enforce
-        access: read-write
+        mcp:
+          allow_all_known_mcp_methods: true
     binaries:
       - path: "/usr/bin/java"  # [languages].scala default
   nim_lang_org:
