@@ -412,6 +412,58 @@ fn generate_rejects_mcp_with_neither_rules_nor_access() {
     );
 }
 
+#[test]
+fn generate_emits_operation_type_only_for_graphql() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(
+        t.path().join("api.js"),
+        "// @openshell egress repo.packagist.org:443 reason=\"package metadata\" protocol=graphql allow=\"query\" deny=\"mutation:DeletePackage\" bin=/usr/bin/php\n\
+         // @openshell egress api.example.com:443 reason=\"rest\" allow=\"POST:/v1\" bin=/usr/bin/curl\n\
+         // @openshell egress rpc.example.net:443 reason=\"rpc\" protocol=json-rpc allow=\"POST:/\" bin=/usr/bin/curl\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["generate", "-o", "p.yaml"]);
+    assert!(o.status.success(), "{}", err(&o));
+    let y = std::fs::read_to_string(t.path().join("p.yaml")).unwrap();
+    let gql = endpoint_block(&y, "repo.packagist.org");
+    let rules = gql.split("binaries:").next().unwrap();
+    assert!(rules.contains("protocol: graphql"), "{rules}");
+    assert!(rules.contains("operation_type: \"query\""), "{rules}");
+    assert!(rules.contains("operation_type: \"mutation\""), "{rules}");
+    assert!(
+        rules.contains("operation_name: \"DeletePackage\""),
+        "{rules}"
+    );
+    assert!(!rules.contains("method:"), "{rules}");
+    assert!(!rules.contains("path:"), "{rules}");
+    for host in ["api.example.com", "rpc.example.net"] {
+        let ep = endpoint_block(&y, host);
+        assert!(ep.contains("method: \"POST\""), "{ep}");
+        assert!(
+            !ep.contains("operation_type"),
+            "operation_type is GraphQL-only: {ep}"
+        );
+    }
+}
+
+#[test]
+fn generate_rejects_http_method_as_graphql_operation_type() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(
+        t.path().join("api.js"),
+        "// @openshell egress repo.packagist.org:443 reason=\"package metadata\" protocol=graphql allow=\"POST:/graphql\" bin=/usr/bin/php\n",
+    )
+    .unwrap();
+    let o = run(t.path(), &["generate"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    let e = err(&o);
+    assert!(
+        e.contains("api.js:1:")
+            && e.contains("operation_type must be query, mutation, or subscription"),
+        "{e}"
+    );
+}
+
 fn endpoint_block(policy: &str, host: &str) -> String {
     let marker = format!("- host: \"{host}\"");
     let at = policy

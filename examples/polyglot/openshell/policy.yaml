@@ -348,8 +348,7 @@ network_policies:
         enforcement: enforce
         rules:
           - allow:
-              method: "POST"
-              path: "/graphql"
+              operation_type: "query"
     binaries:
       - path: "/usr/bin/php"  # [languages].php default
   rpc_example_net:
