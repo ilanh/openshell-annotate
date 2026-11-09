@@ -6,6 +6,7 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 ## [Unreleased]
 
 - chore(deps): build against OpenShell v0.1.7 (`openshell-policy-schema`, `openshell-policy`); docs and generated policy headers now name v0.1.7
+- fix(diff-logs): ignore OCSF Network Activity Refuse records (policy DNS `policy_dns_ineligible`) that have no port, so OCSF JSON and shorthand logs report the same denials
 
 ## [0.1.0-rc.3] - 2026-11-09
 

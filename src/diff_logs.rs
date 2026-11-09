@@ -100,9 +100,19 @@ fn strip_query(p: &str) -> String {
 /// Only network activity (class 4001; activity 4 is a failure) and HTTP activity (class 4002) are used. Returns `None`
 /// for other classes, records without a destination host or an action, and the binary is dropped unless it is an
 /// absolute path.
+///
+/// Network "Refuse" records (activity 5, e.g. `status_detail: policy_dns_ineligible` when policy DNS refuses a name the
+/// policy does not allow) are skipped as well: they carry no port or process, and the connection attempt that follows
+/// is logged separately as a denied Open with host, port and binary. The shorthand parser ignores `NET:REFUSE` too.
 fn parse_json_line(v: &serde_json::Value, source: &str, line: usize) -> Option<Event> {
     let class_uid = v.get("class_uid")?.as_u64()?;
     if class_uid != 4001 && class_uid != 4002 {
+        return None;
+    }
+    if class_uid == 4001
+        && (v.get("activity_id").and_then(|a| a.as_u64()) == Some(5)
+            || v.get("status_detail").and_then(|d| d.as_str()) == Some("policy_dns_ineligible"))
+    {
         return None;
     }
     let failed = class_uid == 4001 && v.get("activity_id").and_then(|a| a.as_u64()) == Some(4);
@@ -946,6 +956,35 @@ garbage line\n";
         assert_eq!(
             (e[1].action, e[1].class, e[1].host.as_str()),
             (Action::Allowed, "http", "h.example")
+        );
+    }
+
+    #[test]
+    fn skips_ocsf_network_refuse_records() {
+        // Real OpenShell v0.1.7 (OCSF 1.8.0) policy-DNS refusal followed by the denied connection it precedes.
+        let t = concat!(
+            "{\"class_uid\":4001,\"activity_id\":5,\"activity_name\":\"Refuse\",\"status_detail\":\"policy_dns_ineligible\",",
+            "\"dst_endpoint\":{\"domain\":\"example.com\"},\"action_id\":2,\"action\":\"Denied\",\"metadata\":{\"version\":\"1.8.0\"}}\n",
+            "{\"class_uid\":4001,\"activity_id\":1,\"status_detail\":\"policy_dns_ineligible\",\"dst_endpoint\":{\"domain\":\"b.example\"},\"action\":\"Denied\"}\n",
+            "{\"class_uid\":4001,\"activity_id\":1,\"status_detail\":\"transparent_tcp_policy_denied\",",
+            "\"dst_endpoint\":{\"domain\":\"example.com\",\"ip\":\"198.18.0.3\",\"port\":443},",
+            "\"actor\":{\"process\":{\"name\":\"/usr/bin/curl\",\"pid\":0}},\"action_id\":2,\"action\":\"Denied\",\"metadata\":{\"version\":\"1.8.0\"}}\n",
+        );
+        let e = parse_logs(t, "x");
+        assert_eq!(e.len(), 1);
+        assert_eq!(
+            (
+                e[0].action,
+                e[0].host.as_str(),
+                e[0].port,
+                e[0].binary.as_deref()
+            ),
+            (
+                Action::Denied,
+                "example.com",
+                Some(443),
+                Some("/usr/bin/curl")
+            )
         );
     }
 
