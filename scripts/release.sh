@@ -18,10 +18,21 @@ if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then echo "relea
 branch="$(git rev-parse --abbrev-ref HEAD)"
 [ "$branch" = main ] || echo "note: you are on '$branch', not main; releases should be cut from a branch based on current main" >&2
 
-# 1. Cargo.toml (first `version =` line is the [package] one) and Cargo.lock (workspace members only)
-sed -i.bak "0,/^version = \".*\"$/s//version = \"$version\"/" Cargo.toml && rm -f Cargo.toml.bak
+# 1. Cargo.toml (the `version =` line in the [package] table) and Cargo.lock (workspace members only).
+# Portable awk (no GNU-only `sed 0,/re/`, which silently did nothing with BSD sed on macOS, #64).
+tmp_toml="$(mktemp)"
+awk -v v="$version" '
+  /^\[/ { in_pkg = ($0 == "[package]") }
+  in_pkg && !done && /^version = ".*"$/ { print "version = \"" v "\""; done = 1; next }
+  { print }
+' Cargo.toml > "$tmp_toml"
+cat "$tmp_toml" > Cargo.toml && rm -f "$tmp_toml"
+bumped="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+[ "$bumped" = "$version" ] || { echo "release.sh: failed to bump Cargo.toml [package] version to $version (still '$bumped')" >&2; git checkout -- Cargo.toml; exit 1; }
 cargo update --workspace --offline > /dev/null 2>&1 || cargo update --workspace > /dev/null
 cargo metadata --locked --format-version 1 --no-deps > /dev/null   # fails if Cargo.lock is not in sync
+lock_version="$(awk '/^name = "openshell-annotate"$/{f=1;next} f&&/^version = /{gsub(/^version = "|"$/,"");print;exit}' Cargo.lock)"
+[ "$lock_version" = "$version" ] || { echo "release.sh: Cargo.lock still has openshell-annotate '$lock_version', expected $version" >&2; exit 1; }
 
 # 2. CHANGELOG.md: unreleased notes + merged PR titles since the previous tag
 prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
