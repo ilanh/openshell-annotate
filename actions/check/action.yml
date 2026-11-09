@@ -6,7 +6,7 @@ branding:
 
 inputs:
   version:
-    description: Release tag for setup (`latest`, a tag, or `source` to build this repository).
+    description: CLI version, as for `setup` (a release tag, `latest` for the newest stable release, or `source` to build the action's own ref).
     required: false
     default: v0.1.0-rc.3
   root:
@@ -21,7 +21,7 @@ inputs:
     required: false
     default: ""
   profiles-dir:
-    description: Provider profiles directory.
+    description: Provider profiles directory for drift (`--profiles-dir`).
     required: false
     default: ""
   failure-threshold:
@@ -52,7 +52,7 @@ runs:
     - name: Restore cache
       if: inputs.version != 'source'
       id: cache
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.2
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.dir.outputs.dir }}/openshell-annotate
         key: openshell-annotate-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}

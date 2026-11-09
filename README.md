@@ -15,14 +15,21 @@ Status: early prototype (version 0.1.0). Targets OpenShell policy schema v1
 
 Downstream repositories can run drift, lint, generate, and diff-logs in CI with composite actions under
 [`actions/`](actions/). Pin a release tag on every `uses:` line (same ref for all steps). See
-[docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) for inputs, outputs, and copy-paste workflows.
+[docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) for setup, choosing a version, inputs and outputs, recipes and
+troubleshooting.
 
 ```yaml
-- uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.3
+- uses: ilanh/openshell-annotate/actions/setup@v0.1.0-rc.3
+- uses: ilanh/openshell-annotate/actions/drift@v0.1.0-rc.3
   with:
     policy: openshell/policy.yaml
     providers: openshell/providers.json
+- uses: ilanh/openshell-annotate/actions/lint@v0.1.0-rc.3
+  with:
+    policy: openshell/policy.yaml
 ```
+
+The combined `check` action works from other repositories on `main` and in releases after `v0.1.0-rc.3` (#65).
 
 ## Install
 
