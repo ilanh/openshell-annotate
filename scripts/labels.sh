@@ -19,6 +19,7 @@ LABELS=(
   "good first issue|7057ff|Good for newcomers"
   "upstream-openshell|b60205|Behaviour of OpenShell itself; tracked locally, not filed upstream"
   "upstream-compat|e99695|Breakage against a newer OpenShell (opened by the weekly job)"
+  "openshell-next|1d76db|Tracking the next OpenShell release on the openshell-next branch"
 )
 
 for entry in "${LABELS[@]}"; do

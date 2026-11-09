@@ -5,6 +5,8 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+- ci: `openshell-next` branch automation: a daily workflow merges main into `openshell-next`, moves its OpenShell pin to the newest upstream tag (prereleases included), runs the tests and reports on the tracking issue; `scripts/openshell-tags.sh` and `scripts/openshell-next.sh` do the same by hand
+- fix(ci): `scripts/upstream-compat.sh` repoints both OpenShell crates (it left `openshell-policy` on the old tag) and runs on macOS; `upstream-compat.yml` also runs, non-blocking, on every push to main
 - chore(audit): ignore RUSTSEC-2026-0459 (`libsqlite3-sys` 0.37.0, pinned by OpenShell v0.1.7 through `sqlx` 0.9.0) in `.cargo/audit.toml` until OpenShell upgrades it (#76)
 - chore(deps): build against OpenShell v0.1.7 (`openshell-policy-schema`, `openshell-policy`); docs and generated policy headers now name v0.1.7
 - docs(actions): `docs/GITHUB_ACTIONS.md` is now a setup and usage guide (versions, recipes, troubleshooting); its inputs/outputs tables are generated from `action.yml` by `scripts/gen-actions-docs.sh` and checked in CI

@@ -1,0 +1,193 @@
+name: openshell-next
+
+# Keeps the long-lived `openshell-next` branch building against the newest NVIDIA/OpenShell tag, prereleases included,
+# so the next OpenShell release is integrated (and any breakage fixed) before it ships as stable.
+# Daily: merge main into openshell-next, bump the OpenShell pin when upstream has a newer tag, run the tests, push, and
+# report on the tracking issue (label `openshell-next`). See docs/DEVELOPING.md ("Tracking the next OpenShell release").
+#
+# Pushes made with GITHUB_TOKEN do not trigger other workflows, so this job runs the test suite itself and then
+# dispatches ci.yml on the pushed commit (workflow_dispatch is the one event GITHUB_TOKEN may start), which puts the
+# required `check` / `audit` results on the tracking PR's head commit.
+# Local equivalent: scripts/openshell-next.sh sync && scripts/openshell-next.sh update
+
+on:
+  schedule:
+    - cron: "17 4 * * *" # daily 04:17 UTC
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "OpenShell tag to pin (default: the newest upstream tag). Applied only when newer than the current pin."
+        required: false
+        default: ""
+      report:
+        description: "Comment on the tracking issue even when nothing changed"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openshell-next
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  BRANCH: openshell-next
+  UPSTREAM: https://github.com/NVIDIA/OpenShell
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # push the main merge / pin bump to openshell-next (never to main)
+      issues: write # comment on the tracking issue
+      actions: write # dispatch ci.yml on the pushed commit
+      pull-requests: read # find the tracking PR
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check out openshell-next (created from main if missing)
+        id: branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          else
+            git checkout -B "$BRANCH" origin/main
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "before=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        run: rustup toolchain install 1.94 --profile minimal --component rustfmt,clippy && rustup default 1.94
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-openshell-next-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-openshell-next-
+
+      - name: Merge main into openshell-next
+        id: sync
+        run: scripts/openshell-next.sh sync origin/main 2>&1 | tee "$RUNNER_TEMP/sync.log"
+
+      - name: Bump to the newest OpenShell tag
+        id: bump
+        env:
+          WANT: ${{ inputs.tag }}
+        run: |
+          scripts/openshell-next.sh update "$WANT" | tee "$RUNNER_TEMP/update.out"
+          if ! git diff --quiet; then
+            tag=$(sed -n 's/^tag=//p' "$RUNNER_TEMP/update.out")
+            prev=$(sed -n 's/^previous=//p' "$RUNNER_TEMP/update.out")
+            git commit -a --signoff -m "chore(deps): track OpenShell $tag on openshell-next" \
+              -m "Automated by .github/workflows/openshell-next.yml. Upstream changes: $UPSTREAM/compare/$prev...$tag"
+          fi
+
+      - name: Test (fmt, clippy, test, docs)
+        id: test
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          {
+            cargo fmt --check &&
+              cargo clippy --all-targets --locked -- -D warnings &&
+              cargo test --locked &&
+              scripts/gen-docs.sh --check
+          } 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      # The branch mirrors upstream, so a bump is pushed even when the tests fail: the fix is then made on top of it.
+      - name: Push openshell-next
+        id: push
+        env:
+          BEFORE: ${{ steps.branch.outputs.before }}
+          CREATED: ${{ steps.branch.outputs.created }}
+        run: |
+          if [ "$CREATED" = true ] || [ "$(git rev-parse HEAD)" != "$BEFORE" ]; then
+            git push origin "HEAD:refs/heads/$BRANCH"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "nothing new to push"
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run CI on the pushed commit
+        if: steps.push.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run ci.yml --ref "$BRANCH"
+
+      - name: Report on the tracking issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC: ${{ steps.sync.outcome }}
+          TEST: ${{ steps.test.outcome }}
+          CHANGED: ${{ steps.bump.outputs.changed }}
+          PREV: ${{ steps.bump.outputs.previous }}
+          TAG: ${{ steps.bump.outputs.tag }}
+          STABLE: ${{ steps.bump.outputs.stable }}
+          CREATED: ${{ steps.branch.outputs.created }}
+          PUSHED: ${{ steps.push.outputs.pushed }}
+          FORCE_REPORT: ${{ inputs.report }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          icon() { case "$1" in success) echo "✅ passed" ;; failure) echo "❌ failed" ;; *) echo "⏭️ skipped" ;; esac; }
+          if [ "$CHANGED" != true ] && [ "$SYNC" = success ] && [ "$TEST" = success ] && [ "$CREATED" != true ] && [ "$FORCE_REPORT" != true ]; then
+            echo "pin unchanged (${TAG:-?}) and everything passed: nothing to report" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          sha=$(git rev-parse HEAD)
+          pr=$(gh pr list --head "$BRANCH" --base main --state open --json url --jq '.[0].url // empty')
+          {
+            if [ "$CHANGED" = true ]; then echo "### OpenShell \`$TAG\` is now pinned on \`$BRANCH\`"; else echo "### \`$BRANCH\` check (pin \`${TAG:-unknown}\`)"; fi
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            if [ "$CHANGED" = true ]; then
+              echo "| Pin | \`$PREV\` → \`$TAG\` |"
+              echo "| Upstream | [release]($UPSTREAM/releases/tag/$TAG) · [changes since \`$PREV\`]($UPSTREAM/compare/$PREV...$TAG) |"
+            fi
+            echo "| Merge of main | $(icon "$SYNC") |"
+            echo "| Tests (fmt, clippy, test, docs) | $(icon "$TEST") |"
+            echo "| Branch | [\`$BRANCH\` @ \`${sha:0:12}\`]($REPO_URL/commit/$sha)$([ "$PUSHED" = true ] && echo ", pushed; ci.yml dispatched") |"
+            echo "| Tracking PR | ${pr:-none open: [open one]($REPO_URL/compare/main...$BRANCH?expand=1) as a draft} |"
+            echo "| Run | $RUN_URL |"
+            if [ "$SYNC" = failure ]; then
+              echo; echo "Merging main hit conflicts outside Cargo.toml/Cargo.lock; nothing was pushed. Resolve them by hand:"
+              echo '```'; tail -n 20 "$RUNNER_TEMP/sync.log" 2>/dev/null; echo '```'
+            fi
+            if [ "$TEST" = failure ]; then
+              echo; echo "Last lines of the test log (fix on \`$BRANCH\`; fixes that also hold on main's pin go to main first):"
+              echo '```'; tail -n 40 "$RUNNER_TEMP/test.log" 2>/dev/null; echo '```'
+            fi
+            if [ "$CHANGED" = true ] && [ "$STABLE" = true ]; then
+              echo
+              echo "**\`$TAG\` is a stable OpenShell release.** Promote \`$BRANCH\` to main as described in"
+              echo "[docs/RELEASING.md]($REPO_URL/blob/main/docs/RELEASING.md#promoting-openshell-next-when-openshell-ships-stable):"
+              echo "update the version strings and CHANGELOG on \`$BRANCH\`, mark the tracking PR ready for review, and squash-merge it."
+            fi
+          } > "$RUNNER_TEMP/body.md"
+          cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"
+          gh label create openshell-next --color 1D76DB --description "Tracking the next OpenShell release" 2>/dev/null || true
+          issue=$(gh issue list --label openshell-next --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --label openshell-next --title "Track the next OpenShell release on openshell-next" \
+              --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+      - name: Fail the run when the merge or the tests failed
+        if: steps.sync.outcome == 'failure' || steps.test.outcome == 'failure'
+        run: exit 1
