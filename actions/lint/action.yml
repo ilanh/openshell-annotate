@@ -1,0 +1,68 @@
+name: openshell-annotate lint
+description: Lint directives and call sites; surface findings as workflow annotations and a job summary.
+branding:
+  icon: check-circle
+  color: yellow
+
+inputs:
+  root:
+    description: Repository root (`--root`).
+    required: false
+    default: .
+  policy:
+    description: Policy file to sanity-check (`--policy`); leave empty to skip policy checks.
+    required: false
+    default: ""
+  paths:
+    description: Space-separated paths to lint (default entire root).
+    required: false
+    default: ""
+  failure-threshold:
+    description: When to fail the step — `error` (default), `warning` (also fail on warnings), or `never`.
+    required: false
+    default: error
+
+runs:
+  using: composite
+  steps:
+    - name: Run lint
+      shell: bash
+      working-directory: ${{ inputs.root }}
+      run: |
+        set -euo pipefail
+        root_abs="$(pwd)"
+        args=(lint --root "$root_abs" --format json)
+        if [ -n "${{ inputs.policy }}" ]; then
+          args+=(--policy "${{ inputs.policy }}")
+        fi
+        threshold="${{ inputs.failure-threshold }}"
+        if [ "$threshold" = "warning" ]; then
+          args+=(--deny-warnings)
+        fi
+        # shellcheck disable=SC2206
+        extra=(${{ inputs.paths }})
+        if [ "${#extra[@]}" -gt 0 ]; then
+          args+=("${extra[@]}")
+        fi
+        findings="$RUNNER_TEMP/lint.json"
+        stderr="$RUNNER_TEMP/lint.stderr"
+        set +e
+        openshell-annotate "${args[@]}" >"$findings" 2>"$stderr"
+        cli_code=$?
+        set -e
+        cat "$stderr" >&2
+        bash "${{ github.action_path }}/../lib/lint-report.sh" "$findings" "$threshold"
+        report_code=$?
+        if [ "$threshold" = "never" ]; then
+          if [ "$cli_code" -ne 0 ]; then
+            echo "::notice::lint reported findings but failure-threshold=never (step succeeds)."
+          fi
+          exit 0
+        fi
+        if [ "$report_code" -ne 0 ]; then
+          exit "$report_code"
+        fi
+        if [ "$cli_code" -eq 2 ]; then
+          echo "::error::openshell-annotate lint failed with a usage or I/O error (exit 2)."
+          exit 2
+        fi

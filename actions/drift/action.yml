@@ -1,0 +1,69 @@
+name: openshell-annotate drift
+description: Fail when the committed policy no longer matches @openshell directives in the tree.
+branding:
+  icon: stop
+  color: red
+
+inputs:
+  root:
+    description: Repository root passed to openshell-annotate (`--root`).
+    required: false
+    default: .
+  policy:
+    description: Committed policy.yaml (`--policy`).
+    required: true
+  providers:
+    description: Optional committed providers JSON (`--providers`).
+    required: false
+    default: ""
+  profiles-dir:
+    description: Provider profiles directory (`--profiles-dir`), when not set in config.
+    required: false
+    default: ""
+  strict:
+    description: Treat unmanaged committed sections as drift (`--strict`).
+    required: false
+    default: "false"
+  paths:
+    description: Space-separated paths to scan (default entire root).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Run drift
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.root }}
+      run: |
+        set -euo pipefail
+        root_abs="$(pwd)"
+        policy="${{ inputs.policy }}"
+        args=(drift --root "$root_abs" --policy "$policy" --json)
+        if [ -n "${{ inputs.providers }}" ]; then
+          args+=(--providers "${{ inputs.providers }}")
+        fi
+        if [ -n "${{ inputs.profiles-dir }}" ]; then
+          args+=(--profiles-dir "${{ inputs.profiles-dir }}")
+        fi
+        if [ "${{ inputs.strict }}" = "true" ]; then
+          args+=(--strict)
+        fi
+        # shellcheck disable=SC2206
+        extra=(${{ inputs.paths }})
+        if [ "${#extra[@]}" -gt 0 ]; then
+          args+=("${extra[@]}")
+        fi
+        report="$RUNNER_TEMP/drift.json"
+        set +e
+        openshell-annotate "${args[@]}" >"$report" 2> "$RUNNER_TEMP/drift.stderr"
+        code=$?
+        set -e
+        cat "$RUNNER_TEMP/drift.stderr" >&2
+        bash "${{ github.action_path }}/../lib/drift-summary.sh" "$report"
+        if [ "$code" -ne 0 ]; then
+          echo "::error::Policy drift detected (exit $code). See the job summary and logs."
+          exit "$code"
+        fi
+        echo "no drift"

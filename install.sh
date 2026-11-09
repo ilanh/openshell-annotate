@@ -35,7 +35,7 @@ done
 
 have() { command -v "$1" > /dev/null 2>&1; }
 if have curl; then
-  fetch() { curl -fsSL --proto '=https,http' --retry 3 -o "$2" "$1"; }
+  fetch() { curl -fsSL --proto '=https,http' --retry 8 --retry-delay 3 --retry-all-errors -o "$2" "$1"; }
   resolve() { curl -fsSLI -o /dev/null -w '%{url_effective}' "$1"; }
 elif have wget; then
   fetch() { wget -q -O "$2" "$1"; }

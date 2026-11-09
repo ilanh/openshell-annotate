@@ -1,0 +1,64 @@
+name: openshell-annotate check
+description: Install openshell-annotate, then run drift and lint (common CI gate).
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  version:
+    description: Release tag for setup (`latest`, a tag, or `source` to build this repository).
+    required: false
+    default: v0.1.0-rc.2
+  root:
+    description: Repository root for drift and lint.
+    required: false
+    default: .
+  policy:
+    description: Committed policy.yaml.
+    required: true
+  providers:
+    description: Optional committed providers JSON for drift.
+    required: false
+    default: ""
+  profiles-dir:
+    description: Provider profiles directory.
+    required: false
+    default: ""
+  failure-threshold:
+    description: Lint failure threshold (`error`, `warning`, or `never`).
+    required: false
+    default: error
+  strict-drift:
+    description: Pass `--strict` to drift.
+    required: false
+    default: "false"
+
+outputs:
+  version:
+    description: Installed openshell-annotate version.
+    value: ${{ steps.setup.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup
+      id: setup
+      uses: ./actions/setup
+      with:
+        version: ${{ inputs.version }}
+
+    - name: Drift
+      uses: ./actions/drift
+      with:
+        root: ${{ inputs.root }}
+        policy: ${{ inputs.policy }}
+        providers: ${{ inputs.providers }}
+        profiles-dir: ${{ inputs.profiles-dir }}
+        strict: ${{ inputs.strict-drift }}
+
+    - name: Lint
+      uses: ./actions/lint
+      with:
+        root: ${{ inputs.root }}
+        policy: ${{ inputs.policy }}
+        failure-threshold: ${{ inputs.failure-threshold }}

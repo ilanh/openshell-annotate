@@ -1,0 +1,83 @@
+name: openshell-annotate generate
+description: Regenerate policy.yaml and optional providers from @openshell directives.
+branding:
+  icon: file-code
+  color: green
+
+inputs:
+  root:
+    description: Repository root (`--root`).
+    required: false
+    default: .
+  policy-out:
+    description: Output path for policy.yaml (`-o`).
+    required: true
+  providers-out:
+    description: Output path for providers JSON or shell script (`--providers-out`).
+    required: false
+    default: ""
+  profiles-dir:
+    description: Provider profiles directory (`--profiles-dir`).
+    required: false
+    default: ""
+  scaffold-profiles:
+    description: Directory for `--scaffold-profiles` (creates missing provider profile stubs).
+    required: false
+    default: ""
+  upload-artifact:
+    description: Upload policy and providers outputs as a workflow artifact.
+    required: false
+    default: "false"
+  artifact-name:
+    description: Artifact name when upload-artifact is true.
+    required: false
+    default: openshell-policy
+
+outputs:
+  policy-path:
+    description: Absolute path to the generated policy file.
+    value: ${{ steps.out.outputs.policy-path }}
+  providers-path:
+    description: Absolute path to the generated providers file, if any.
+    value: ${{ steps.out.outputs.providers-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Generate policy
+      id: out
+      shell: bash
+      working-directory: ${{ inputs.root }}
+      run: |
+        set -euo pipefail
+        root_abs="$(pwd)"
+        policy_rel="${{ inputs.policy-out }}"
+        policy_abs="$root_abs/$policy_rel"
+        mkdir -p "$(dirname "$policy_abs")"
+        args=(generate --root "$root_abs" -o "$policy_rel")
+        providers_rel="${{ inputs.providers-out }}"
+        if [ -n "$providers_rel" ]; then
+          mkdir -p "$(dirname "$root_abs/$providers_rel")"
+          args+=(--providers-out "$providers_rel")
+        fi
+        if [ -n "${{ inputs.profiles-dir }}" ]; then
+          args+=(--profiles-dir "${{ inputs.profiles-dir }}")
+        fi
+        if [ -n "${{ inputs.scaffold-profiles }}" ]; then
+          args+=(--scaffold-profiles "${{ inputs.scaffold-profiles }}")
+        fi
+        openshell-annotate "${args[@]}"
+        echo "policy-path=$policy_abs" >>"$GITHUB_OUTPUT"
+        if [ -n "$providers_rel" ]; then
+          echo "providers-path=$root_abs/$providers_rel" >>"$GITHUB_OUTPUT"
+        fi
+
+    - name: Upload artifact
+      if: inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.6.2
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ steps.out.outputs.policy-path }}
+          ${{ steps.out.outputs.providers-path }}
+        if-no-files-found: ignore
