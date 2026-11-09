@@ -10,10 +10,15 @@
 # branch both changed the pin, `sync` keeps the newer of the two tags and re-resolves Cargo.lock; any other conflict
 # aborts the merge (exit 3) so a human can resolve it.
 # `update` prints `previous=`, `tag=`, `changed=` and `stable=` lines (also appended to $GITHUB_OUTPUT when set).
+# Env: OPENSHELL_ANNOTATE_ROOT, the checkout to work on (default: the one this script lives in). The workflow runs
+#      main's copy of these scripts from a temp dir against the openshell-next checkout, so the branch needs no copy.
 # Exit: 0 ok, 2 usage / bad tag, 3 merge conflict that needs a human.
 set -euo pipefail
-cd "$(dirname "$0")/.."
-TAGS=scripts/openshell-tags.sh
+HERE=$(cd "$(dirname "$0")" && pwd)
+ROOT=$(cd "${OPENSHELL_ANNOTATE_ROOT:-$HERE/..}" && pwd)
+export OPENSHELL_ANNOTATE_ROOT="$ROOT" # so openshell-tags.sh reads the same Cargo.toml
+cd "$ROOT"
+TAGS="$HERE/openshell-tags.sh"
 CRATES=(openshell-policy-schema openshell-policy)
 
 bump() {

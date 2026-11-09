@@ -10,10 +10,11 @@
 #
 # Only vX.Y.Z and vX.Y.Z-pre.N tags count; anything else upstream (`dev`, `vm-runtime`, ...) is ignored.
 # Env: UPSTREAM_REPO (default https://github.com/NVIDIA/OpenShell); OPENSHELL_TAGS (newline-separated tag list to use
-#      instead of asking the remote, for tests and offline runs).
+#      instead of asking the remote, for tests and offline runs); OPENSHELL_ANNOTATE_ROOT (checkout whose Cargo.toml
+#      `pinned` reads; default: the checkout this script lives in).
 # Exit: 0 ok / true, 1 false, 2 usage or no tags found.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "${OPENSHELL_ANNOTATE_ROOT:-$(dirname "$0")/..}"
 
 REPO="${UPSTREAM_REPO:-https://github.com/NVIDIA/OpenShell}"
 RE='^v[0-9]+\.[0-9]+\.[0-9]+(-pre\.[0-9]+)?$'

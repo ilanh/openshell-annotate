@@ -8,6 +8,8 @@ name: openshell-next
 # Pushes made with GITHUB_TOKEN do not trigger other workflows, so this job runs the test suite itself and then
 # dispatches ci.yml on the pushed commit (workflow_dispatch is the one event GITHUB_TOKEN may start), which puts the
 # required `check` / `audit` results on the tracking PR's head commit.
+# The scripts that move the branch (scripts/openshell-next.sh, scripts/openshell-tags.sh) always come from main: they
+# are copied to a temp dir before openshell-next is checked out and run against that checkout (OPENSHELL_ANNOTATE_ROOT).
 # Local equivalent: scripts/openshell-next.sh sync && scripts/openshell-next.sh update
 
 on:
@@ -26,6 +28,12 @@ on:
 
 permissions:
   contents: read
+
+# `shell: bash` runs steps with `bash --noprofile --norc -eo pipefail`; the implicit default (`bash -e`) has no pipefail,
+# so a failing command piped into `tee` would pass.
+defaults:
+  run:
+    shell: bash
 
 concurrency:
   group: openshell-next
@@ -50,6 +58,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Keep main's branch tooling
+        run: |
+          mkdir -p "$RUNNER_TEMP/tools"
+          cp scripts/openshell-next.sh scripts/openshell-tags.sh "$RUNNER_TEMP/tools/"
+          {
+            echo "TOOLS=$RUNNER_TEMP/tools"
+            echo "OPENSHELL_ANNOTATE_ROOT=$GITHUB_WORKSPACE"
+          } >> "$GITHUB_ENV"
+
       - name: Check out openshell-next (created from main if missing)
         id: branch
         run: |
@@ -63,6 +80,7 @@ jobs:
             echo "created=true" >> "$GITHUB_OUTPUT"
           fi
           echo "before=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "pin=$("$TOOLS/openshell-tags.sh" pinned)" >> "$GITHUB_OUTPUT"
 
       - name: Install Rust
         run: rustup toolchain install 1.94 --profile minimal --component rustfmt,clippy && rustup default 1.94
@@ -78,17 +96,17 @@ jobs:
 
       - name: Merge main into openshell-next
         id: sync
-        run: scripts/openshell-next.sh sync origin/main 2>&1 | tee "$RUNNER_TEMP/sync.log"
+        run: '"$TOOLS/openshell-next.sh" sync origin/main 2>&1 | tee "$RUNNER_TEMP/sync.log"'
 
       - name: Bump to the newest OpenShell tag
         id: bump
         env:
           WANT: ${{ inputs.tag }}
         run: |
-          scripts/openshell-next.sh update "$WANT" | tee "$RUNNER_TEMP/update.out"
+          "$TOOLS/openshell-next.sh" update "$WANT" 2>&1 | tee "$RUNNER_TEMP/update.log"
           if ! git diff --quiet; then
-            tag=$(sed -n 's/^tag=//p' "$RUNNER_TEMP/update.out")
-            prev=$(sed -n 's/^previous=//p' "$RUNNER_TEMP/update.out")
+            tag=$(sed -n 's/^tag=//p' "$RUNNER_TEMP/update.log")
+            prev=$(sed -n 's/^previous=//p' "$RUNNER_TEMP/update.log")
             git commit -a --signoff -m "chore(deps): track OpenShell $tag on openshell-next" \
               -m "Automated by .github/workflows/openshell-next.yml. Upstream changes: $UPSTREAM/compare/$prev...$tag"
           fi
@@ -97,7 +115,6 @@ jobs:
         id: test
         continue-on-error: true
         run: |
-          set -o pipefail
           {
             cargo fmt --check &&
               cargo clippy --all-targets --locked -- -D warnings &&
@@ -131,7 +148,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SYNC: ${{ steps.sync.outcome }}
+          BUMP: ${{ steps.bump.outcome }}
           TEST: ${{ steps.test.outcome }}
+          START_PIN: ${{ steps.branch.outputs.pin }}
           CHANGED: ${{ steps.bump.outputs.changed }}
           PREV: ${{ steps.bump.outputs.previous }}
           TAG: ${{ steps.bump.outputs.tag }}
@@ -142,15 +161,19 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
-          icon() { case "$1" in success) echo "✅ passed" ;; failure) echo "❌ failed" ;; *) echo "⏭️ skipped" ;; esac; }
-          if [ "$CHANGED" != true ] && [ "$SYNC" = success ] && [ "$TEST" = success ] && [ "$CREATED" != true ] && [ "$FORCE_REPORT" != true ]; then
+          icon() { case "$1" in success) echo "✅ passed" ;; failure) echo "❌ failed" ;; cancelled) echo "🚫 cancelled" ;; *) echo "⏭️ skipped" ;; esac; }
+          # The pin as the branch has it now (after any bump), else as the bump step or the checkout saw it.
+          TAG=$("$TOOLS/openshell-tags.sh" pinned 2>/dev/null || echo "${TAG:-${START_PIN:-unknown}}")
+          if [ "$CHANGED" != true ] && [ "$SYNC" = success ] && [ "$BUMP" = success ] && [ "$TEST" = success ] && [ "$CREATED" != true ] && [ "$FORCE_REPORT" != true ]; then
             echo "pin unchanged (${TAG:-?}) and everything passed: nothing to report" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           sha=$(git rev-parse HEAD)
           pr=$(gh pr list --head "$BRANCH" --base main --state open --json url --jq '.[0].url // empty')
           {
-            if [ "$CHANGED" = true ]; then echo "### OpenShell \`$TAG\` is now pinned on \`$BRANCH\`"; else echo "### \`$BRANCH\` check (pin \`${TAG:-unknown}\`)"; fi
+            failed=""
+            for o in "$SYNC" "$BUMP" "$TEST"; do [ "$o" = failure ] && failed=" ❌"; done
+            if [ "$CHANGED" = true ]; then echo "### OpenShell \`$TAG\` is now pinned on \`$BRANCH\`$failed"; else echo "### \`$BRANCH\` check (pin \`$TAG\`)$failed"; fi
             echo
             echo "| | |"
             echo "|---|---|"
@@ -159,17 +182,22 @@ jobs:
               echo "| Upstream | [release]($UPSTREAM/releases/tag/$TAG) · [changes since \`$PREV\`]($UPSTREAM/compare/$PREV...$TAG) |"
             fi
             echo "| Merge of main | $(icon "$SYNC") |"
+            echo "| Pin update | $(icon "$BUMP")$([ "$CHANGED" = true ] || [ "$BUMP" != success ] || echo ", already on the newest tag") |"
             echo "| Tests (fmt, clippy, test, docs) | $(icon "$TEST") |"
             echo "| Branch | [\`$BRANCH\` @ \`${sha:0:12}\`]($REPO_URL/commit/$sha)$([ "$PUSHED" = true ] && echo ", pushed; ci.yml dispatched") |"
             echo "| Tracking PR | ${pr:-none open: [open one]($REPO_URL/compare/main...$BRANCH?expand=1) as a draft} |"
             echo "| Run | $RUN_URL |"
             if [ "$SYNC" = failure ]; then
-              echo; echo "Merging main hit conflicts outside Cargo.toml/Cargo.lock; nothing was pushed. Resolve them by hand:"
-              echo '```'; tail -n 20 "$RUNNER_TEMP/sync.log" 2>/dev/null; echo '```'
+              echo; echo "Merging main failed (usually a conflict outside Cargo.toml/Cargo.lock, which needs resolving by hand); nothing was pushed:"
+              echo '```'; tail -n 20 "$RUNNER_TEMP/sync.log" 2>/dev/null || echo "(no log captured)"; echo '```'
+            fi
+            if [ "$BUMP" = failure ]; then
+              echo; echo "Moving the pin failed; nothing was pushed:"
+              echo '```'; tail -n 20 "$RUNNER_TEMP/update.log" 2>/dev/null || echo "(no log captured)"; echo '```'
             fi
             if [ "$TEST" = failure ]; then
               echo; echo "Last lines of the test log (fix on \`$BRANCH\`; fixes that also hold on main's pin go to main first):"
-              echo '```'; tail -n 40 "$RUNNER_TEMP/test.log" 2>/dev/null; echo '```'
+              echo '```'; tail -n 40 "$RUNNER_TEMP/test.log" 2>/dev/null || echo "(no log captured)"; echo '```'
             fi
             if [ "$CHANGED" = true ] && [ "$STABLE" = true ]; then
               echo
@@ -188,6 +216,6 @@ jobs:
               --body-file "$RUNNER_TEMP/body.md"
           fi
 
-      - name: Fail the run when the merge or the tests failed
-        if: steps.sync.outcome == 'failure' || steps.test.outcome == 'failure'
+      - name: Fail the run when the merge, the pin update or the tests failed
+        if: always() && (steps.sync.outcome == 'failure' || steps.bump.outcome == 'failure' || steps.test.outcome == 'failure')
         run: exit 1
