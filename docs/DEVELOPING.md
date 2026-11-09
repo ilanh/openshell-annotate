@@ -47,7 +47,7 @@ Expected: four result lines, all `ok` (26 unit tests, 30 CLI tests in `tests/cli
 ## 4. Run what CI runs
 
 CI (`.github/workflows/ci.yml`) runs `cargo fmt --check`, `cargo clippy --all-targets --locked -- -D warnings`,
-`cargo test --locked` and `scripts/gen-docs.sh --check`, plus `cargo audit`. All but the audit are one command:
+`cargo test --locked`, `scripts/gen-docs.sh --check` and `scripts/gen-actions-docs.sh --check`, plus `cargo audit`. All but the audit are one command:
 
 ```
 TOOLCHAIN=1.94 scripts/ci-local.sh     # pinned like CI; omit TOOLCHAIN to use your default toolchain
@@ -60,6 +60,8 @@ separate commit (CI will keep using 1.94 until the pin is bumped on purpose in `
 
 `docs/CLI.md` and `docs/DIRECTIVES.md` are generated from the code. After changing a flag, directive or attribute run
 `scripts/gen-docs.sh` and commit the result; `scripts/gen-docs.sh --check` (and `cargo test`) fail when they are stale.
+The inputs/outputs tables in `docs/GITHUB_ACTIONS.md` are generated from `actions/*/action.yml` the same way
+(`scripts/gen-actions-docs.sh`). Which docs to update for which change is listed in `AGENTS.md`.
 
 ### Upstream compatibility (OpenShell schema changes)
 
@@ -202,5 +204,6 @@ public repo or a paid plan).
 | `error: failed to select a version` / git fetch of `OpenShell` fails | the schema crate comes from github.com; check network or proxy; `--locked` needs the tag commit recorded in `Cargo.lock` |
 | clippy errors that CI does not show | newer toolchain; run with `TOOLCHAIN=1.94` or fix the new lint |
 | `docs are stale` | run `scripts/gen-docs.sh` and commit `docs/` |
+| `docs/GITHUB_ACTIONS.md is out of date with actions/*/action.yml` | run `scripts/gen-actions-docs.sh` and commit it; add a `BEGIN/END actions-docs <name>` section for a new action |
 | sandbox probes get `403` from `api.github.com` | unauthenticated GitHub API rate limit (60 requests per hour per IP), not a policy decision; wait for the reset or use another host |
 | `openshell-prover: not found` in `flow.sh` | install the OpenShell 0.1.7 tools; the static commands (`scan`, `generate`, `lint`, `drift`, `diff-logs`) do not need them |

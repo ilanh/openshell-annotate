@@ -42,6 +42,10 @@ GitHub issues are how we track all work: bugs, features and follow-ups.
   `tests/fixtures/`). If generated output changes, review `tests/fixtures/sample/policy.expected.yaml` by hand (its header carries `@VERSION@`, which the tests replace with the crate version).
 - Never emit a field that the pinned `openshell-policy-schema` rejects.
 - No secrets in code, fixtures or test output.
+- Update the docs in the same pull request. The table in [AGENTS.md](AGENTS.md#docs-must-be-updated-in-the-same-pr)
+  maps code areas to docs: `actions/*` to `docs/GITHUB_ACTIONS.md`, CLI flags and commands to `README.md` and the
+  generated `docs/CLI.md`, directives to the generated `docs/DIRECTIVES.md`, the release process to `docs/RELEASING.md`,
+  and user-visible changes to `CHANGELOG.md`.
 
 ## Checks (CI runs the same)
 
@@ -52,6 +56,7 @@ cargo fmt --check
 cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 scripts/gen-docs.sh --check      # regenerate with scripts/gen-docs.sh when directives or flags change
+scripts/gen-actions-docs.sh --check   # regenerate with scripts/gen-actions-docs.sh when an action.yml changes
 ```
 
 ## Developer Certificate of Origin (DCO)

@@ -7,6 +7,7 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 - chore(audit): ignore RUSTSEC-2026-0459 (`libsqlite3-sys` 0.37.0, pinned by OpenShell v0.1.7 through `sqlx` 0.9.0) in `.cargo/audit.toml` until OpenShell upgrades it (#76)
 - chore(deps): build against OpenShell v0.1.7 (`openshell-policy-schema`, `openshell-policy`); docs and generated policy headers now name v0.1.7
+- docs(actions): `docs/GITHUB_ACTIONS.md` is now a setup and usage guide (versions, recipes, troubleshooting); its inputs/outputs tables are generated from `action.yml` by `scripts/gen-actions-docs.sh` and checked in CI
 - fix(diff-logs): ignore OCSF Network Activity Refuse records (policy DNS `policy_dns_ineligible`) that have no port, so OCSF JSON and shorthand logs report the same denials
 
 ## [0.1.0-rc.3] - 2026-11-09

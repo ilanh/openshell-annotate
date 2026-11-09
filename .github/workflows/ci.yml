@@ -35,6 +35,8 @@ jobs:
         run: cargo test --locked --test gateway_policies
       - name: docs are up to date
         run: scripts/gen-docs.sh --check
+      - name: GitHub Actions docs match action.yml
+        run: scripts/gen-actions-docs.sh --check
 
   audit:
     runs-on: ubuntu-latest

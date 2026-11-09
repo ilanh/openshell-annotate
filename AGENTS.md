@@ -26,3 +26,19 @@ subprocesses; add directives with reasons; run `scan`, `generate`, `lint`, `drif
 - Human output: `src/report.rs` renders lint; `src/render.rs` renders `scan`, `diff-logs` and the `generate` summary in the same
   style (shared `Style`, icons, `--format/--color/--no-icons`). `--format compact` and `--format json` must stay byte-stable
   and `generate` must never put anything but the policy on stdout. Snapshots live in `tests/golden` (`UPDATE_GOLDEN=1 cargo test`).
+
+## Docs must be updated in the same PR
+A change is not done until the docs that describe it match. Update them in the same pull request:
+
+| When you change | Update |
+| --- | --- |
+| `actions/*` (inputs, outputs, behaviour) or `actions/lib/*` | `docs/GITHUB_ACTIONS.md`: run `scripts/gen-actions-docs.sh` for the tables, then fix the prose, recipes and troubleshooting; the README snippet if usage changed |
+| CLI commands, flags, exit codes or output | `README.md` and `scripts/gen-docs.sh` (regenerates `docs/CLI.md`); `docs/DEVELOPING.md` if a workflow changes |
+| Directives or attributes (`src/directive.rs`, `src/spec.rs`, `src/generate.rs`) | `scripts/gen-docs.sh` (regenerates `docs/DIRECTIVES.md`) and `skills/annotate-openshell-policy/SKILL.md` if authoring guidance changes |
+| Release process (`scripts/release.sh`, `release.yml`, `install.sh`, packaging) | `docs/RELEASING.md` |
+| Pinned OpenShell version (`Cargo.toml`) | every doc that names the version (`git grep -n 'v0\.1\.[0-9]'`) |
+| Branch, issue or CI rules | `CONTRIBUTING.md`, `docs/DEVELOPING.md`, `.github/pull_request_template.md` |
+| Anything user-visible | a line under `## [Unreleased]` in `CHANGELOG.md` |
+
+CI enforces the generated parts (`scripts/gen-docs.sh --check`, `scripts/gen-actions-docs.sh --check`); the rest is on
+the author and the reviewer.
