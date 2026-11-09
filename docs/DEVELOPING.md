@@ -83,6 +83,10 @@ turns a normal PR red. A failed *scheduled* run opens (or comments on) a single 
 target, the upstream commit and a link to the log. The resolved upstream commit is in each run's job summary.
 When a target breaks, fix it on a branch (or bump the pin when `latest-release` moves on).
 
+`cargo audit` ignores are listed in `.cargo/audit.toml`, each with its advisory and the condition for removing it.
+Today that is `RUSTSEC-2026-0459` (`libsqlite3-sys` pinned by OpenShell's `sqlx`, #76): whenever you bump the OpenShell
+pin, run `cargo tree -i libsqlite3-sys --target all` and drop the ignore once it resolves to 0.39.0 or newer.
+
 ## 5. Try it on a tiny project
 
 ```
