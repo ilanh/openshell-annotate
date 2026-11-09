@@ -5,10 +5,21 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+## [0.1.0-rc.3] - 2026-11-09
+
 - fix(generate): MCP endpoints emit `mcp.allow_all_known_mcp_methods` instead of an access preset
 - fix(generate): emit `operation_type` only on GraphQL rules, and only as query, mutation, or subscription
 - fix(generate): reject `rest`, `websocket`, and `graphql` directives that set neither rules nor an access preset
 - fix(lint): check `lint --policy`, `drift`, and generated policies with the OpenShell gateway validator
+
+Merged pull requests since v0.1.0-rc.2:
+
+- feat(actions): shared GitHub Actions for CI/CD (setup, drift, lint, generate, diff-logs, check) (#62)
+- fix(lint): check policies with the OpenShell gateway validator (#59)
+- fix(generate): reject L7 protocols that name neither rules nor access (#58)
+- fix(generate): emit GraphQL operation_type only for GraphQL rules (#60)
+- fix(generate): emit MCP allow-all instead of an access preset (#56)
+- docs: add examples/README.md for the polyglot example (#51)
 
 ## [0.1.0-rc.2] - 2026-11-04
 

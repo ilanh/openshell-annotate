@@ -18,7 +18,7 @@ Downstream repositories can run drift, lint, generate, and diff-logs in CI with 
 [docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) for inputs, outputs, and copy-paste workflows.
 
 ```yaml
-- uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.2
+- uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.3
   with:
     policy: openshell/policy.yaml
     providers: openshell/providers.json
