@@ -95,3 +95,37 @@ jobs:
           policy: openshell/policy.yaml
       - name: Assert drift failed
         run: test "${{ steps.drift.outcome }}" = failure
+
+  # Regression test for #65: run `check` the way an external consumer does. This repository is checked out
+  # into a subdirectory, so the workspace root is a separate "consumer" repo with no actions/ directory.
+  # A relative `uses: ./actions/...` inside a composite resolves against that workspace and would fail here.
+  consumer-check:
+    name: consumer check (${{ matrix.version }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [source, v0.1.0-rc.3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          path: annotate-src
+      - name: Create consumer fixture repo
+        run: |
+          cp -a annotate-src/examples/polyglot consumer
+          test ! -e actions
+      - name: Check (as a consumer)
+        id: check
+        uses: ./annotate-src/actions/check
+        with:
+          version: ${{ matrix.version }}
+          root: consumer
+          policy: openshell/policy.yaml
+          providers: openshell/providers.json
+          failure-threshold: warning
+      - name: Assert version output
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          echo "installed: $VERSION"
+          test -n "$VERSION"
