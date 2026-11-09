@@ -22,6 +22,11 @@ required (0 approvals, conversations resolved), status checks `check` and `audit
 history, no force pushes, no deletion, and no bypass for admins. GitHub only enforces rulesets on private repositories
 with a paid plan; until then the rules are followed by convention.
 
+The one exception to "branch from `main`" is `openshell-next`, a long-lived integration branch that builds against the
+newest OpenShell prerelease and is updated daily by `.github/workflows/openshell-next.yml`. Fixes that only apply to the
+new OpenShell version go in a branch off `openshell-next` with a PR into it; everything else goes to `main` first.
+Never force-push or delete it. Details: `docs/DEVELOPING.md`, "Tracking the next OpenShell release".
+
 ## Issues
 
 GitHub issues are how we track all work: bugs, features and follow-ups.
@@ -30,7 +35,8 @@ GitHub issues are how we track all work: bugs, features and follow-ups.
    disabled; security problems go through `SECURITY.md`, not an issue).
 2. Labels: `bug` or `enhancement`, plus an area (`scan`, `generate`, `lint`, `drift`, `diff-logs`, `providers`,
    `languages`, `docs`). `upstream-openshell` marks behaviour of OpenShell itself that we only track locally;
-   `upstream-compat` is used by the weekly compatibility job. Create or refresh the labels with `scripts/labels.sh`.
+   `upstream-compat` is used by the weekly compatibility job and `openshell-next` by the tracking issue for the next
+   OpenShell release. Create or refresh the labels with `scripts/labels.sh`.
 3. Work on a branch (see above) and put `Closes #<issue>` in the pull request description, one line per issue, so the
    issue closes automatically when the PR is squash-merged. Use `Refs #<issue>` when the issue should stay open.
 4. Keep one pull request per issue, or a small group of closely related issues.

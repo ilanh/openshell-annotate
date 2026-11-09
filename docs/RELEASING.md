@@ -59,6 +59,26 @@ before a tag exists.
 - Actions must be allowed to create attestations (the default for public repositories). If you restrict allowed actions,
   permit `actions/*`, `docker/*` and `anchore/sbom-action`. All actions are pinned to a commit SHA.
 
+## Promoting `openshell-next` when OpenShell ships stable
+
+`openshell-next` (see `docs/DEVELOPING.md`, "Tracking the next OpenShell release") builds against OpenShell
+prereleases. When upstream tags the stable `vX.Y.Z`, the daily workflow moves the branch to it and adds a "stable
+release" note to the tracking issue. To bring it to `main`:
+
+1. Read the upstream release notes and the compare link in that comment; tick the tracking PR's checklist.
+2. On `openshell-next` (via a `chore/openshell-vX.Y.Z` PR into it, or directly if you maintain the branch), update
+   everything that names the old version: `git grep -n 'v\?0\.1\.[0-9]'` (README, AGENTS.md, docs, `Dockerfile`, the strings
+   in `src/`), regenerate the goldens (`UPDATE_GOLDEN=1 cargo test`, then review), and add a CHANGELOG line under
+   `## [Unreleased]`. The workflow only moves the pin, so these strings still name the old version until then.
+3. Retitle the tracking PR to `chore(deps): bump OpenShell crates to vX.Y.Z`, put `Closes #<tracking issue>` in it,
+   mark it ready for review, and squash-merge it once `check` and `audit` pass. `openshell-next` itself survives the
+   merge (the `protect-openshell-next` ruleset blocks the automatic branch deletion) and keeps tracking from `main`.
+4. Open a new tracking issue (label `openshell-next`) and a new draft PR for the following release, or let the
+   workflow create the issue at the next upstream tag; it links a compare view for opening the PR.
+5. Cut a release of openshell-annotate as usual if users should get the new pin.
+
+Never promote a prerelease pin to `main`: stable openshell-annotate releases build against stable OpenShell only.
+
 ## Installing
 
 ```

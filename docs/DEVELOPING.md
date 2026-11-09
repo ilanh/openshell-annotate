@@ -65,25 +65,71 @@ The inputs/outputs tables in `docs/GITHUB_ACTIONS.md` are generated from `action
 
 ### Upstream compatibility (OpenShell schema changes)
 
-`Cargo.toml` pins `openshell-policy-schema` to an OpenShell tag. To see whether the code still builds and passes its
-tests (including the golden/fixture tests) against newer OpenShell code, without touching `Cargo.toml` or `Cargo.lock`:
+`Cargo.toml` pins both OpenShell crates (`openshell-policy-schema` and the gateway validator `openshell-policy`) to one
+OpenShell tag. To see whether the code still builds and passes its tests (including the golden/fixture tests) against
+newer OpenShell code, without touching `Cargo.toml` or `Cargo.lock`:
 
 ```
 scripts/upstream-compat.sh latest-release   # newest stable vX.Y.Z tag
-scripts/upstream-compat.sh latest-prerelease  # newest vX.Y.Z-pre.N tag if newer than stable, else latest-release
+scripts/upstream-compat.sh latest-prerelease  # newest tag, prereleases included (what openshell-next tracks)
 scripts/upstream-compat.sh main             # OpenShell HEAD
 scripts/upstream-compat.sh v0.1.7-pre.3     # any tag, branch or commit SHA
 ```
 
-It builds a throwaway copy with the dependency repointed to the resolved commit, then runs `cargo build --all-targets`,
+It builds a throwaway copy with both crates repointed to the resolved commit, then runs `cargo build --all-targets`,
 `cargo test` and the docs check, and prints `upstream-compat: <target> @ <sha>: compatible|BROKEN` (exit 1 when broken).
 Set `CARGO_TARGET_DIR` to reuse a build cache.
 
-`.github/workflows/upstream-compat.yml` runs `latest-release`, `latest-prerelease` and `main` weekly (Mondays 05:00 UTC), on manual dispatch, and on pull
-requests that touch `Cargo.toml`, `Cargo.lock` or the workflow itself. It is informational, not a required check: it never
-turns a normal PR red. A failed *scheduled* run opens (or comments on) a single issue labelled `upstream-compat` with the
-target, the upstream commit and a link to the log. The resolved upstream commit is in each run's job summary.
-When a target breaks, fix it on a branch (or bump the pin when `latest-release` moves on).
+`.github/workflows/upstream-compat.yml` runs `latest-release`, `latest-prerelease` and `main` weekly (Mondays 05:00 UTC),
+on manual dispatch, on every push to `main` (except docs-only changes), and on pull requests that touch `Cargo.toml`,
+`Cargo.lock`, the scripts or the workflow itself. It is informational, not a required check: pushes and pull requests
+never turn red because of it. A failed *scheduled* run opens (or comments on) a single issue labelled `upstream-compat`
+with the target, the upstream commit and a link to the log. The resolved upstream commit is in each run's job summary.
+When a target breaks, fix it on `openshell-next` (below), or bump the pin when `latest-release` moves on.
+
+Tag order comes from `scripts/openshell-tags.sh`: only `vX.Y.Z` and `vX.Y.Z-pre.N` tags count, and a stable `vX.Y.Z`
+sorts after its own prereleases (`latest`, `latest-stable`, `list`, `pinned`, `newer A B`, `is-stable A`).
+
+### Tracking the next OpenShell release (`openshell-next`)
+
+`openshell-next` is the one long-lived branch besides `main`. It is `main` plus the OpenShell pin moved to the newest
+upstream tag, prereleases included (for example `v0.1.8-pre.3` while `main` is on `v0.1.7`), plus any fix that only
+makes sense on that version. It exists so the next OpenShell is integrated, and its breakage fixed, before it ships as
+stable. A draft pull request `openshell-next` → `main` and an issue labelled `openshell-next` track it; the issue gets a
+comment for every new upstream tag.
+
+`.github/workflows/openshell-next.yml` runs daily (04:17 UTC) and on manual dispatch (optional `tag` input to pin a
+specific tag, `report` to comment even when nothing changed). It:
+
+1. checks out `openshell-next` (recreating it from `main` if it was deleted) and merges `origin/main` into it with a
+   signed-off merge commit. If both sides changed the pin it keeps the newer tag; any other conflict stops the run
+   without pushing and is reported on the issue for a human to resolve;
+2. moves the pin when upstream has a newer tag (`scripts/openshell-next.sh update`) and commits it as
+   `github-actions[bot]` with a `Signed-off-by` line;
+3. runs `cargo fmt --check`, clippy, `cargo test --locked` and `scripts/gen-docs.sh --check` in the same job;
+4. pushes the branch, even when the tests fail (the branch mirrors upstream; the fix is made on top), then dispatches
+   `ci.yml` on it. Pushes with `GITHUB_TOKEN` start no other workflow, so this is what puts `check` and `audit` on the
+   tracking PR's head commit;
+5. comments on the tracking issue when the pin moved, the branch was created, or the merge or tests failed: the old and
+   new tag, links to the upstream release and compare view, the test result and log tail, and the run. A **stable** tag
+   adds a note to promote the branch (see "Promoting `openshell-next`" in `docs/RELEASING.md`).
+
+It uses only `GITHUB_TOKEN` (`contents: write` for `openshell-next`, `issues: write`, `actions: write` to dispatch CI,
+`pull-requests: read`). It never pushes to `main` or opens pull requests.
+
+Working on the branch by hand:
+
+```
+git fetch origin && git switch openshell-next && git pull --ff-only
+scripts/openshell-next.sh sync              # merge origin/main (what the workflow does first)
+scripts/openshell-next.sh update            # move the pin if upstream has a newer tag (edits files only)
+scripts/openshell-next.sh bump v0.1.8-pre.3 # or pin an exact tag
+TOOLCHAIN=1.94 scripts/ci-local.sh
+```
+
+Fixes for breakage on the new OpenShell go in a `fix/<name>` branch off `openshell-next` with a PR into
+`openshell-next`. A fix that is also correct on `main`'s pin goes to `main` first (its own issue and PR) and reaches
+`openshell-next` with the next sync. Never force-push or rebase `openshell-next`: it only moves forward by merges.
 
 `cargo audit` ignores are listed in `.cargo/audit.toml`, each with its advisory and the condition for removing it.
 Today that is `RUSTSEC-2026-0459` (`libsqlite3-sys` pinned by OpenShell's `sqlx`, #76): whenever you bump the OpenShell
@@ -176,6 +222,7 @@ It is not needed to contribute; `cargo test` covers the generator.
 ## 8. Branch workflow
 
 `main` is protected: no direct commits or pushes, only branches and pull requests (full rules in `CONTRIBUTING.md`).
+The one long-lived branch is `openshell-next`, which the `openshell-next` workflow updates (see section 4).
 
 ```
 git switch main && git pull --ff-only
@@ -194,7 +241,9 @@ Missing sign-off: `git commit --amend -s` (last commit) or `git rebase --signoff
 want public; GitHub's noreply address works.
 
 The protection ruleset lives in `.github/rulesets/protect-main.json`; apply it with `scripts/protect-main.sh` (needs a
-public repo or a paid plan).
+public repo or a paid plan). `.github/rulesets/protect-openshell-next.json` blocks force pushes to and deletion of
+`openshell-next` (the workflow only fast-forwards it); apply it once with
+`gh api -X POST repos/ilanh/openshell-annotate/rulesets --input .github/rulesets/protect-openshell-next.json`.
 
 ## 9. Troubleshooting
 
