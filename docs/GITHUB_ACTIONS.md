@@ -28,7 +28,7 @@ jobs:
   openshell:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd719010b57f4849f8b6fb4f9b486b8e0e8f4 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
       - uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.2
         with:
           root: .
@@ -138,7 +138,7 @@ jobs:
   policy:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd719010b57f4849f8b6fb4f9b486b8e0e8f4 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
       - uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.2
         with:
           root: .

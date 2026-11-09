@@ -74,7 +74,7 @@ runs:
 
     - name: Upload artifact
       if: inputs.upload-artifact == 'true'
-      uses: actions/upload-artifact@ea165f8d6b58e6d428a90ab3e4a8f78e3e262899 # v4.6.2
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.6.2
       with:
         name: ${{ inputs.artifact-name }}
         path: |
