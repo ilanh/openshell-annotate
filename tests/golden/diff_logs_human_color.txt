@@ -59,5 +59,5 @@
 
 [1;31m✖ 4 suggestions[0m[2m  (1 stale directive · 1 not actionable)[0m
 💡 next: `openshell-annotate diff-logs denied.log --write` inserts 3 directives (review, then regenerate the policy)
-[2mnote: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.6 (#4270).
+[2mnote: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.7 (#4270).
 [0m

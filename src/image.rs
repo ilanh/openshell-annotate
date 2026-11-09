@@ -1,8 +1,8 @@
 //! `generate --image IMAGE`: propose `fs read` directives for application paths in a container image.
 //!
 //! The OpenShell supervisor only grants read access to a fixed baseline (`/usr /lib /etc /app /var/log /proc
-//! /dev/urandom`, plus `/tmp` and `/dev/null` for writing, verified in v0.1.6 `PROXY_BASELINE_*`). An app that lives
-//! elsewhere (`/opt/context7`) fails at startup with EACCES, and OpenShell 0.1.6 does not log filesystem denials
+//! /dev/urandom`, plus `/tmp` and `/dev/null` for writing, verified in v0.1.7 `PROXY_BASELINE_*`). An app that lives
+//! elsewhere (`/opt/context7`) fails at startup with EACCES, and OpenShell 0.1.7 does not log filesystem denials
 //! (upstream #4270), so neither the logs nor `diff-logs` can point at it. The image says where the app lives: its
 //! WORKDIR, ENTRYPOINT and CMD.
 
@@ -260,7 +260,7 @@ pub fn add_dirs(props: &mut Vec<Proposal>, dirs: Vec<String>, declared: &[String
 /// Renders the stderr note listing the proposals and the `@openshell fs read` lines to add for them.
 pub fn render_note(image: &str, props: &[Proposal]) -> String {
     let mut s = format!(
-        "note: image {image} keeps files outside OpenShell's baseline read set ({}); the sandbox cannot read them, and OpenShell 0.1.6 does not log that denial (#4270):\n",
+        "note: image {image} keeps files outside OpenShell's baseline read set ({}); the sandbox cannot read them, and OpenShell 0.1.7 does not log that denial (#4270):\n",
         ["/usr", "/lib", "/etc", "/app", "/var/log", "/proc", "/dev/urandom"].join(" ")
     );
     for p in props {

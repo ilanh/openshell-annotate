@@ -2,7 +2,7 @@
 //!
 //! Authoritative checks live in `openshell-policy-schema` (parsing, unknown fields) and in
 //! [`gateway_violations`], which calls `openshell_policy::validate_and_canonicalize_sandbox_policy`
-//! (OpenShell v0.1.6, the same tag as the schema crate). This module also re-implements the
+//! (OpenShell v0.1.7, the same tag as the schema crate). This module also re-implements the
 //! file-level semantic rules documented in `docs/how-it-works/policies/schema.mdx` so errors carry
 //! directive locations. `generate` round-trips its output through `parse_policy` and the gateway
 //! validator.

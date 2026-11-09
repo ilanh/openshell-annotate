@@ -10,7 +10,7 @@ subprocesses; add directives with reasons; run `scan`, `generate`, `lint`, `drif
 
 ## When changing this tool
 - Build/test: `cargo build && cargo test` (Rust 1.94+). The schema crate is a git dependency pinned to the
-  OpenShell `v0.1.6` tag (see `Cargo.toml`, `Cargo.lock` pins the commit). Update the tag deliberately and re-run
+  OpenShell `v0.1.7` tag (see `Cargo.toml`, `Cargo.lock` pins the commit). Update the tag deliberately and re-run
   the golden tests.
 - Never emit a field the pinned `openshell-policy-schema` rejects. `generate` re-parses its own output with
   `parse_policy`; tests assert this.

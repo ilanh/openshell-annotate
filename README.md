@@ -9,7 +9,7 @@ un-annotated calls, and gates CI on drift.
 > NVIDIA. It uses NVIDIA OpenShell's public policy schema crate (Apache-2.0) to validate what it generates.
 
 Status: early prototype (version 0.1.0). Targets OpenShell policy schema v1
-(`openshell-policy-schema` @ v0.1.6). Licensed under Apache-2.0.
+(`openshell-policy-schema` @ v0.1.7). Licensed under Apache-2.0.
 
 ## GitHub Actions
 
@@ -104,7 +104,7 @@ stderr. Exit codes and `--deny-warnings` do not depend on the format.
 
 ### Files the image keeps outside OpenShell's baseline (`generate --image`)
 
-OpenShell 0.1.6 only lets the sandbox read `/usr /lib /etc /app /var/log /proc /dev/urandom` (plus the workspace when
+OpenShell 0.1.7 only lets the sandbox read `/usr /lib /etc /app /var/log /proc /dev/urandom` (plus the workspace when
 `include_workdir` is on) once a `filesystem_policy` exists, and it does not log filesystem denials
 ([NVIDIA/OpenShell#4270](https://github.com/NVIDIA/OpenShell/issues/4270)), so an application under `/opt/<app>` fails with a bare
 `EACCES`. `generate --image IMAGE` inspects the image (docker, then podman: WORKDIR, ENTRYPOINT, CMD, and the directory
@@ -314,7 +314,7 @@ the rule; a profile bound to other binaries (the bundled `github` profile is for
   listed in `[lint] ignore_hosts`.
 - JS regex literals are not parsed; Python docstrings are strings (directives must be `#` comments).
 - Filesystem/process/landlock are startup-only in OpenShell; drift labels them `startup`.
-- `diff-logs` only sees network and L7 events: OpenShell 0.1.6 does not log Landlock/filesystem denials (upstream #4270), log
+- `diff-logs` only sees network and L7 events: OpenShell 0.1.7 does not log Landlock/filesystem denials (upstream #4270), log
   delivery is batched and best-effort (wait a few seconds after the workload; absence of an event is not proof), and `NET:REFUSE` lines carry no binary.
   A helper spawned by an allowed binary (git -> git-remote-http) is matched through its parent.
 - Semantic checks mirror `openshell-policy::validate_sandbox_policy` (documented rules) but the authoritative
