@@ -2,7 +2,7 @@ name: Actions self-test
 
 on:
   push:
-    branches: [main]
+    branches: [main, "cursor/**"]
     paths:
       - "actions/**"
       - ".github/workflows/actions-selftest.yml"
