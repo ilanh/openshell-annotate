@@ -78,7 +78,14 @@ runs:
         if [ "$VERIFY" = "true" ]; then
           args+=(--verify)
         fi
-        sh "$install_sh" "${args[@]}"
+        attempt=0
+        max=5
+        until sh "$install_sh" "${args[@]}"; do
+          attempt=$((attempt + 1))
+          [ "$attempt" -ge "$max" ] && exit 1
+          echo "install.sh failed (attempt $attempt/$max); retrying in ${attempt}0s..." >&2
+          sleep $((attempt * 10))
+        done
 
     - name: Build from source
       if: inputs.version == 'source'
