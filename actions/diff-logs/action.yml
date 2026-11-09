@@ -1,0 +1,53 @@
+name: openshell-annotate diff-logs
+description: Compare sandbox logs against directives and report gaps in the job summary.
+branding:
+  icon: search
+  color: purple
+
+inputs:
+  root:
+    description: Repository root (`--root`).
+    required: false
+    default: .
+  logs:
+    description: Space-separated log file paths (shorthand or OCSF JSONL).
+    required: true
+  write:
+    description: Insert suggested directives (`--write`).
+    required: false
+    default: "false"
+  deny-stale:
+    description: Fail when logs show no traffic for a declared egress (`--deny-stale`).
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Run diff-logs
+      shell: bash
+      working-directory: ${{ inputs.root }}
+      run: |
+        set -euo pipefail
+        root_abs="$(pwd)"
+        args=(diff-logs --root "$root_abs" --no-icons)
+        if [ "${{ inputs.write }}" = "true" ]; then
+          args+=(--write)
+        fi
+        if [ "${{ inputs.deny-stale }}" = "true" ]; then
+          args+=(--deny-stale)
+        fi
+        # shellcheck disable=SC2206
+        log_files=(${{ inputs.logs }})
+        if [ "${#log_files[@]}" -eq 0 ]; then
+          echo "::error::inputs.logs is required"
+          exit 2
+        fi
+        args+=("${log_files[@]}")
+        out="$RUNNER_TEMP/diff-logs.txt"
+        set +e
+        openshell-annotate "${args[@]}" | tee "$out"
+        code=$?
+        set -e
+        bash "${{ github.action_path }}/../lib/diff-logs-summary.sh" "$out"
+        exit "$code"

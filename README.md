@@ -11,6 +11,19 @@ un-annotated calls, and gates CI on drift.
 Status: early prototype (version 0.1.0). Targets OpenShell policy schema v1
 (`openshell-policy-schema` @ v0.1.6). Licensed under Apache-2.0.
 
+## GitHub Actions
+
+Downstream repositories can run drift, lint, generate, and diff-logs in CI with composite actions under
+[`actions/`](actions/). Pin a release tag on every `uses:` line (same ref for all steps). See
+[docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md) for inputs, outputs, and copy-paste workflows.
+
+```yaml
+- uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.2
+  with:
+    policy: openshell/policy.yaml
+    providers: openshell/providers.json
+```
+
 ## Install
 
 Prebuilt binaries (Linux and macOS, x86_64 and arm64) and a container image are attached to each

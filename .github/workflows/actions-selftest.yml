@@ -1,0 +1,97 @@
+name: Actions self-test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "actions/**"
+      - ".github/workflows/actions-selftest.yml"
+      - "install.sh"
+  pull_request:
+    paths:
+      - "actions/**"
+      - ".github/workflows/actions-selftest.yml"
+      - "install.sh"
+      - "docs/GITHUB_ACTIONS.md"
+      - "README.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actions-selftest-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-setup-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd719010b57f4849f8b6fb4f9b486b8e0e8f4 # v4.2.2
+      - name: Install from release
+        uses: ./actions/setup
+        with:
+          version: v0.1.0-rc.2
+          cache: "true"
+      - name: Print version
+        run: openshell-annotate --version
+
+  integration:
+    name: integration (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@11bd719010b57f4849f8b6fb4f9b486b8e0e8f4 # v4.2.2
+      - name: Check (setup + drift + lint)
+        uses: ./actions/check
+        with:
+          version: source
+          root: examples/polyglot
+          policy: openshell/policy.yaml
+          providers: openshell/providers.json
+          failure-threshold: warning
+      - name: Generate
+        id: gen
+        uses: ./actions/generate
+        with:
+          root: examples/polyglot
+          policy-out: openshell/ci-policy.yaml
+          providers-out: openshell/ci-providers.json
+      - name: Assert generate outputs
+        run: test -f "${{ steps.gen.outputs.policy-path }}"
+      - name: diff-logs (expect findings)
+        uses: ./actions/diff-logs
+        continue-on-error: true
+        id: difflogs
+        with:
+          root: tests/fixtures/sample
+          logs: ${{ github.workspace }}/tests/fixtures/logs/shorthand.log
+      - name: diff-logs should report missing directives
+        run: test "${{ steps.difflogs.outcome }}" = failure
+
+  drift-failure:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd719010b57f4849f8b6fb4f9b486b8e0e8f4 # v4.2.2
+      - uses: ./actions/setup
+        with:
+          version: source
+          cache: "false"
+      - name: Copy example and tamper policy
+        id: prep
+        run: |
+          dir="$RUNNER_TEMP/polyglot-drift"
+          cp -a examples/polyglot "$dir"
+          sed -i 's/enforcement: enforce/enforcement: audit/' "$dir/openshell/policy.yaml"
+          echo "dir=$dir" >>"$GITHUB_OUTPUT"
+      - name: Drift must fail
+        uses: ./actions/drift
+        continue-on-error: true
+        id: drift
+        with:
+          root: ${{ steps.prep.outputs.dir }}
+          policy: openshell/policy.yaml
+      - name: Assert drift failed
+        run: test "${{ steps.drift.outcome }}" = failure
