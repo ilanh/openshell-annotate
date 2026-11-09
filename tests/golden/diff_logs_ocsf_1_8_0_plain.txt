@@ -1,0 +1,42 @@
+diff-logs  10 events: 3 denied, 7 allowed
+
+Missing directives  (2)
+
+missing egress: example.com:443  x1  /usr/bin/curl
+  --> app.py:27
+   |
+26 |     # Deliberately unannotated: the sandbox blocks it.
+ + |     # @openshell egress example.com:443 reason="observed in sandbox log: /usr/bin/curl (confirm it is needed)" bin=/usr/bin/curl
+27 |     return subprocess.run(["curl", "-sS", "https://example.com"], check=True)
+   |
+   = why: no directive covers this host:port
+
+missing egress: pypi.org:443  x1  /usr/local/bin/python3.12
+  = why: no directive covers this host:port
+  = where: no source line mentions this host; `--write` appends it to openshell/observed-egress.sh
+  = add: @openshell egress pypi.org:443 reason="observed in sandbox log: /usr/local/bin/python3.12 (confirm it is needed)" bin=/usr/local/bin/python3.12
+
+L7 rules too narrow  (1)
+
+l7 allow: httpbin.org:443  x1
+  --> app.py:11
+   |
+10 | def httpbin_get():
+ + |     # @openshell egress httpbin.org:443 reason="observed L7 deny: POST /post (confirm it is needed)" allow="POST:/post" bin=/usr/local/bin/python3.12
+11 |     # @openshell egress httpbin.org:443 reason="L7 path rule" allow=GET:/get
+   |
+   = why: method/path not permitted by the rules at app.py:11
+
+Stale directives  (1)
+
+stale: jsonplaceholder.typicode.com:443  /usr/local/bin/python3.12
+  --> app.py:31
+   |
+31 |     # @openshell egress jsonplaceholder.typicode.com:443 reason="never called in the captured run" allow=GET:/...
+   |
+   = note: never matched in these logs (advisory: logs are lossy, remove only after a run that exercised
+           this feature)
+
+3 suggestions  (1 stale directive)
+next: `openshell-annotate diff-logs ocsf.jsonl --write` inserts 3 directives (review, then regenerate the policy)
+note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.7 (#4270).

@@ -1,0 +1,3 @@
+# Mirrors the playground sandbox that produced tests/fixtures/logs/ocsf-1.8.0.jsonl (OpenShell v0.1.7).
+[languages]
+python = "/usr/local/bin/python3.12"
