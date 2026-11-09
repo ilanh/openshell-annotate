@@ -18,7 +18,7 @@ Order matters: each milestone builds on the previous one. Nothing is published (
 ## 2. Docker image (publish)
 - **Scope:** small runtime image with the binary (tree-sitter grammars compiled in; distroless/cc base, 34.9 MB), entrypoint `openshell-annotate`, workdir `/src`.
 - **Deliverables:** multi-stage `Dockerfile`, `scripts/docker-build.sh` (local tag `openshell-annotate:dev`, no OpenShell checkout needed), then, after approval, a publish workflow to a registry (ghcr.io) with version tags.
-- **Depends on:** a public home for the repo (the `openshell-policy-schema` dependency now resolves from the public OpenShell repo at tag v0.1.6, so the build is portable). Publishing to a registry needs the maintainer's approval.
+- **Depends on:** a public home for the repo (the `openshell-policy-schema` dependency now resolves from the public OpenShell repo at tag v0.1.7, so the build is portable). Publishing to a registry needs the maintainer's approval.
 
 ## 3. GitHub Action + GitLab CI template
 - **Scope:** run `lint --deny-warnings` and `drift --policy openshell/policy.yaml` on every pull/merge request; fail with annotations.

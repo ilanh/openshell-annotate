@@ -662,7 +662,7 @@ pub fn diff_logs_human(
     }
     out.push_str(&style.paint(
         "2",
-        "note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.6 (#4270).\n",
+        "note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.7 (#4270).\n",
     ));
     out
 }

@@ -59,4 +59,4 @@ blocked: 169.254.169.254:80  x1
 
 4 suggestions  (1 stale directive, 1 not actionable)
 next: `openshell-annotate diff-logs denied.log --write` inserts 3 directives (review, then regenerate the policy)
-note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.6 (#4270).
+note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.7 (#4270).

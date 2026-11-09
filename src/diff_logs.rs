@@ -3,7 +3,7 @@
 //! directives that never matched an event are reported as stale.
 //!
 //! Delivery of these logs is best-effort: *absence of a deny or an allow is not proof*. Filesystem denials are not logged by
-//! OpenShell 0.1.6 (upstream #4270), so only network and L7 HTTP events are handled.
+//! OpenShell 0.1.7 (upstream #4270), so only network and L7 HTTP events are handled.
 
 use crate::config::Config;
 use crate::directive::{Directive, Kind};
@@ -866,7 +866,7 @@ pub fn render_text(rep: &Report) -> String {
         "diff-logs: {} event(s) ({} denied, {} allowed); {} suggestion(s), {} stale directive(s)\n",
         rep.events, rep.denied, rep.allowed, rep.suggestions.len(), rep.stale.len()
     );
-    s.push_str("note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.6 (#4270).\n");
+    s.push_str("note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.7 (#4270).\n");
     for g in &rep.suggestions {
         let up = g.kind.to_ascii_uppercase();
         s.push_str(&format!(

@@ -8,10 +8,10 @@ build that downloads crates takes longer.
 
 | Needed for | What |
 |---|---|
-| everything | Git, a C compiler (`build-essential` / Xcode command line tools: the tree-sitter grammars are C), network access to crates.io and github.com (the OpenShell schema crate is a git dependency pinned to the `v0.1.6` tag) |
+| everything | Git, a C compiler (`build-essential` / Xcode command line tools: the tree-sitter grammars are C), network access to crates.io and github.com (the OpenShell schema crate is a git dependency pinned to the `v0.1.7` tag) |
 | build and test | Rust **1.94** or newer through [rustup](https://rustup.rs). CI pins 1.94 |
 | Docker image (optional) | Docker with BuildKit |
-| sandbox flow (optional) | the `openshell` CLI and `openshell-prover` at 0.1.6, a running OpenShell gateway, and Docker (see section 7) |
+| sandbox flow (optional) | the `openshell` CLI and `openshell-prover` at 0.1.7, a running OpenShell gateway, and Docker (see section 7) |
 
 ```
 rustup toolchain install 1.94 --profile minimal --component rustfmt,clippy
@@ -131,7 +131,7 @@ openshell-annotate diff-logs path/to/sandbox.log --write  # inserts directives a
                                                           # otherwise writes openshell/observed-egress.sh (scanned like any source: review or delete it)
 ```
 
-Sample logs for both formats are in `tests/fixtures/logs/`. Filesystem denials are not logged by OpenShell 0.1.6, so
+Sample logs for both formats are in `tests/fixtures/logs/`. Filesystem denials are not logged by OpenShell 0.1.7, so
 `diff-logs` only sees network and L7 events.
 
 ## 6. Docker image
@@ -157,7 +157,7 @@ scripts/flow.sh /path/to/project --diff-logs sandbox.log          # + diff-logs 
 scripts/flow.sh /path/to/project --image my-image:tag --run-seconds 30 --exercise exercise.js -- sleep 600
 ```
 
-It needs `openshell` and `openshell-prover` 0.1.6 on PATH and a connected gateway (`openshell status` shows `Connected`), and
+It needs `openshell` and `openshell-prover` 0.1.7 on PATH and a connected gateway (`openshell status` shows `Connected`), and
 `OPENSHELL_ANNOTATE=/path/to/binary` if the binary is not on PATH. The image's interpreter paths must be real executables
 (not symlinks) and match `[languages]` in `openshell-annotate.toml`, because OpenShell matches the resolved binary path.
 A bare `sleep` workload produces no traffic and so no events: drive the sandbox with `--exercise FILE.js` (run with `node -e`),
@@ -199,4 +199,4 @@ public repo or a paid plan).
 | clippy errors that CI does not show | newer toolchain; run with `TOOLCHAIN=1.94` or fix the new lint |
 | `docs are stale` | run `scripts/gen-docs.sh` and commit `docs/` |
 | sandbox probes get `403` from `api.github.com` | unauthenticated GitHub API rate limit (60 requests per hour per IP), not a policy decision; wait for the reset or use another host |
-| `openshell-prover: not found` in `flow.sh` | install the OpenShell 0.1.6 tools; the static commands (`scan`, `generate`, `lint`, `drift`, `diff-logs`) do not need them |
+| `openshell-prover: not found` in `flow.sh` | install the OpenShell 0.1.7 tools; the static commands (`scan`, `generate`, `lint`, `drift`, `diff-logs`) do not need them |

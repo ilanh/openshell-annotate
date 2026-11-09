@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Build:  scripts/docker-build.sh   (or: docker build -t openshell-annotate:dev .)
 #
-# `openshell-policy-schema` is a git dependency on https://github.com/NVIDIA/OpenShell (tag v0.1.6, commit pinned
+# `openshell-policy-schema` is a git dependency on https://github.com/NVIDIA/OpenShell (tag v0.1.7, commit pinned
 # in Cargo.lock), fetched by cargo during the build, so no local OpenShell checkout is needed.
 FROM rust:1.94-bookworm AS build
 WORKDIR /build

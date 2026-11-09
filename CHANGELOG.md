@@ -5,6 +5,8 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+- chore(deps): build against OpenShell v0.1.7 (`openshell-policy-schema`, `openshell-policy`); docs and generated policy headers now name v0.1.7
+
 ## [0.1.0-rc.3] - 2026-11-09
 
 - fix(generate): MCP endpoints emit `mcp.allow_all_known_mcp_methods` instead of an access preset
