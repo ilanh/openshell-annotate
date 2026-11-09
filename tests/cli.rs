@@ -2152,3 +2152,57 @@ fn committed_policy(example: &Path) -> String {
         .unwrap()
         .replace("@VERSION@", env!("CARGO_PKG_VERSION"))
 }
+
+/// Real OpenShell v0.1.7 supervisor records (native OCSF 1.8.0, scrubbed), checked against the app they came from.
+/// The two policy-DNS "Refuse" records (activity 5) are skipped (#69), so JSON gives the same result as shorthand.
+#[test]
+fn diff_logs_reads_openshell_0_1_7_ocsf_1_8_0_records() {
+    let t = tempfile::tempdir().unwrap();
+    copy_dir(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ocsf-1.8.0-app"),
+        t.path(),
+    );
+    std::fs::copy(
+        logs_fixture("ocsf-1.8.0.jsonl"),
+        t.path().join("ocsf.jsonl"),
+    )
+    .unwrap();
+    let text = std::fs::read_to_string(logs_fixture("ocsf-1.8.0.jsonl")).unwrap();
+    assert!(text
+        .lines()
+        .all(|l| l.contains("\"metadata\":{\"version\":\"1.8.0\"")));
+
+    let o = run(t.path(), &["diff-logs", "ocsf.jsonl", "--json"]);
+    assert_eq!(o.status.code(), Some(1), "{}", err(&o));
+    let v: serde_json::Value = serde_json::from_str(&out(&o)).unwrap();
+    assert_eq!(
+        (
+            v["events"].as_u64(),
+            v["denied"].as_u64(),
+            v["allowed"].as_u64()
+        ),
+        (Some(10), Some(3), Some(7))
+    );
+    let k = kinds(&v);
+    for want in [
+        ("missing_egress", "example.com", "/usr/bin/curl"),
+        ("missing_egress", "pypi.org", "/usr/local/bin/python3.12"),
+        ("l7_allow", "httpbin.org", ""),
+    ] {
+        assert!(
+            k.iter()
+                .any(|(a, b, c)| (a.as_str(), b.as_str()) == (want.0, want.1)
+                    && (want.2.is_empty() || c == want.2)),
+            "{want:?} not in {k:?}"
+        );
+    }
+    assert!(!k.iter().any(|(a, _, _)| a == "manual"), "{k:?}");
+
+    let o = run_env(
+        t.path(),
+        &["diff-logs", "ocsf.jsonl", "--color", "never", "--no-icons"],
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", err(&o));
+    golden("diff_logs_ocsf_1_8_0_plain.txt", &out(&o));
+}
