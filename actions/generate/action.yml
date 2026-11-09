@@ -1,7 +1,7 @@
 name: openshell-annotate generate
 description: Regenerate policy.yaml and optional providers from @openshell directives.
 branding:
-  icon: file-code
+  icon: file-text
   color: green
 
 inputs:

@@ -38,27 +38,62 @@ outputs:
     description: Installed openshell-annotate version.
     value: ${{ steps.setup.outputs.version }}
 
+# The steps below call the shared scripts in actions/lib through `github.action_path` instead of
+# `uses: ./actions/<name>`: inside a composite action a relative `uses:` resolves against the caller's
+# workspace, which breaks consumers of `ilanh/openshell-annotate/actions/check@<ref>` (issue #65).
 runs:
   using: composite
   steps:
-    - name: Setup
-      id: setup
-      uses: ./actions/setup
+    - name: Resolve install directory
+      id: dir
+      shell: bash
+      run: bash "${{ github.action_path }}/../lib/setup.sh" dir
+
+    - name: Restore cache
+      if: inputs.version != 'source'
+      id: cache
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.2
       with:
-        version: ${{ inputs.version }}
+        path: ${{ steps.dir.outputs.dir }}/openshell-annotate
+        key: openshell-annotate-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+
+    - name: Install from release
+      if: inputs.version != 'source' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        INSTALL_DIR: ${{ steps.dir.outputs.dir }}
+        OPENSHELL_ANNOTATE_VERSION: ${{ inputs.version }}
+        VERIFY: "false"
+      run: bash "${{ github.action_path }}/../lib/setup.sh" install
+
+    - name: Build from source
+      if: inputs.version == 'source'
+      shell: bash
+      env:
+        INSTALL_DIR: ${{ steps.dir.outputs.dir }}
+      run: bash "${{ github.action_path }}/../lib/setup.sh" build
+
+    - name: Add to PATH and record version
+      id: setup
+      shell: bash
+      env:
+        INSTALL_DIR: ${{ steps.dir.outputs.dir }}
+      run: bash "${{ github.action_path }}/../lib/setup.sh" finish
 
     - name: Drift
-      uses: ./actions/drift
-      with:
-        root: ${{ inputs.root }}
-        policy: ${{ inputs.policy }}
-        providers: ${{ inputs.providers }}
-        profiles-dir: ${{ inputs.profiles-dir }}
-        strict: ${{ inputs.strict-drift }}
+      shell: bash
+      working-directory: ${{ inputs.root }}
+      env:
+        POLICY: ${{ inputs.policy }}
+        PROVIDERS: ${{ inputs.providers }}
+        PROFILES_DIR: ${{ inputs.profiles-dir }}
+        STRICT: ${{ inputs.strict-drift }}
+      run: bash "${{ github.action_path }}/../lib/drift.sh"
 
     - name: Lint
-      uses: ./actions/lint
-      with:
-        root: ${{ inputs.root }}
-        policy: ${{ inputs.policy }}
-        failure-threshold: ${{ inputs.failure-threshold }}
+      shell: bash
+      working-directory: ${{ inputs.root }}
+      env:
+        POLICY: ${{ inputs.policy }}
+        THRESHOLD: ${{ inputs.failure-threshold }}
+      run: bash "${{ github.action_path }}/../lib/lint.sh"

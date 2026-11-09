@@ -52,7 +52,7 @@ jobs:
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `version` | `v0.1.0-rc.3` | Release tag, `latest`, or `source` (build with cargo; needs checkout + Rust 1.94) |
+| `version` | `v0.1.0-rc.3` | Release tag, `latest`, or `source` (build the action's own sources with cargo; Rust 1.94) |
 | `install-dir` | `$RUNNER_TOOL_CACHE/openshell-annotate` | Install location |
 | `verify-attestation` | `false` | `gh attestation verify` (needs GitHub CLI) |
 | `cache` | `true` | Cache the binary between runs |
@@ -115,6 +115,12 @@ summary table.
 
 Combines `setup`, `drift`, and `lint`. Inputs: `version`, `root`, `policy`, `providers`, `profiles-dir`,
 `failure-threshold`, `strict-drift`. Output: `version` (installed CLI).
+
+The actions share their logic through scripts in [`actions/lib`](../actions/lib), called via
+`github.action_path`. `check` does not nest `uses: ./actions/...` steps, because inside a composite action a
+relative `uses:` resolves against the caller's workspace and breaks remote consumers (#65). The
+`consumer-check` job in `.github/workflows/actions-selftest.yml` runs `check` from a subdirectory checkout to
+catch that regression.
 
 ## CD: regenerate policy in CI
 

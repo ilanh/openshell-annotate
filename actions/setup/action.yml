@@ -38,14 +38,9 @@ runs:
     - name: Resolve install directory
       id: dir
       shell: bash
-      run: |
-        if [ -n "${{ inputs.install-dir }}" ]; then
-          dir="${{ inputs.install-dir }}"
-        else
-          dir="${RUNNER_TOOL_CACHE}/openshell-annotate"
-        fi
-        mkdir -p "$dir"
-        echo "dir=$dir" >>"$GITHUB_OUTPUT"
+      env:
+        INPUT_INSTALL_DIR: ${{ inputs.install-dir }}
+      run: bash "${{ github.action_path }}/../lib/setup.sh" dir
 
     - name: Restore cache
       if: inputs.cache == 'true' && inputs.version != 'source'
@@ -62,55 +57,18 @@ runs:
         INSTALL_DIR: ${{ steps.dir.outputs.dir }}
         OPENSHELL_ANNOTATE_VERSION: ${{ inputs.version }}
         VERIFY: ${{ inputs.verify-attestation }}
-      run: |
-        set -euo pipefail
-        install_sh="${{ github.action_path }}/../../install.sh"
-        if [ ! -f "$install_sh" ]; then
-          ref="${GITHUB_ACTION_REPOSITORY#*/}"
-          ref_repo="ilanh/openshell-annotate"
-          tag="${GITHUB_ACTION_REF:-main}"
-          curl -fsSL "https://raw.githubusercontent.com/${ref_repo}/${tag}/install.sh" -o "$install_sh"
-        fi
-        args=(--dir "$INSTALL_DIR")
-        if [ -n "${OPENSHELL_ANNOTATE_VERSION}" ]; then
-          args+=(--version "$OPENSHELL_ANNOTATE_VERSION")
-        fi
-        if [ "$VERIFY" = "true" ]; then
-          args+=(--verify)
-        fi
-        attempt=0
-        max=5
-        until sh "$install_sh" "${args[@]}"; do
-          attempt=$((attempt + 1))
-          [ "$attempt" -ge "$max" ] && exit 1
-          echo "install.sh failed (attempt $attempt/$max); retrying in ${attempt}0s..." >&2
-          sleep $((attempt * 10))
-        done
+      run: bash "${{ github.action_path }}/../lib/setup.sh" install
 
     - name: Build from source
       if: inputs.version == 'source'
       shell: bash
       env:
         INSTALL_DIR: ${{ steps.dir.outputs.dir }}
-      run: |
-        set -euo pipefail
-        if ! command -v cargo >/dev/null 2>&1; then
-          rustup toolchain install 1.94 --profile minimal
-          rustup default 1.94
-        fi
-        cargo build --release --locked
-        install -m 0755 target/release/openshell-annotate "$INSTALL_DIR/openshell-annotate"
+      run: bash "${{ github.action_path }}/../lib/setup.sh" build
 
-    - name: Add to PATH
-      shell: bash
-      run: echo "${{ steps.dir.outputs.dir }}" >>"$GITHUB_PATH"
-
-    - name: Record version
+    - name: Add to PATH and record version
       id: meta
       shell: bash
-      run: |
-        bin="${{ steps.dir.outputs.dir }}/openshell-annotate"
-        ver="$("$bin" --version 2>/dev/null || true)"
-        echo "version=$ver" >>"$GITHUB_OUTPUT"
-        echo "install-dir=${{ steps.dir.outputs.dir }}" >>"$GITHUB_OUTPUT"
-        echo "openshell-annotate $ver at $bin"
+      env:
+        INSTALL_DIR: ${{ steps.dir.outputs.dir }}
+      run: bash "${{ github.action_path }}/../lib/setup.sh" finish
