@@ -8,7 +8,7 @@ inputs:
   version:
     description: Release tag for setup (`latest`, a tag, or `source` to build this repository).
     required: false
-    default: v0.1.0-rc.2
+    default: v0.1.0-rc.3
   root:
     description: Repository root for drift and lint.
     required: false

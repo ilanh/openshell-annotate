@@ -9,11 +9,11 @@ and `macos-*` runners (linux/darwin, x86_64 and arm64).
 Pin the **same ref** for every action in a workflow, for example a release tag:
 
 ```yaml
-uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.2
+uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.3
 ```
 
 Tags track [releases](https://github.com/ilanh/openshell-annotate/releases). You may also pin a commit SHA for
-maximum stability. The `setup` action’s `version` input is the **CLI** version (defaults to `v0.1.0-rc.2`; `latest` is
+maximum stability. The `setup` action’s `version` input is the **CLI** version (defaults to `v0.1.0-rc.3`; `latest` is
 supported). That is independent of the `@ref` on `uses:` — keep the action ref on a tag/SHA you trust.
 
 Do not rely on `@main` in production workflows; it moves with every merge.
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
-      - uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.2
+      - uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.3
         with:
           root: .
           policy: openshell/policy.yaml
@@ -52,7 +52,7 @@ jobs:
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `version` | `v0.1.0-rc.2` | Release tag, `latest`, or `source` (build with cargo; needs checkout + Rust 1.94) |
+| `version` | `v0.1.0-rc.3` | Release tag, `latest`, or `source` (build with cargo; needs checkout + Rust 1.94) |
 | `install-dir` | `$RUNNER_TOOL_CACHE/openshell-annotate` | Install location |
 | `verify-attestation` | `false` | `gh attestation verify` (needs GitHub CLI) |
 | `cache` | `true` | Cache the binary between runs |
@@ -119,8 +119,8 @@ Combines `setup`, `drift`, and `lint`. Inputs: `version`, `root`, `policy`, `pro
 ## CD: regenerate policy in CI
 
 ```yaml
-      - uses: ilanh/openshell-annotate/actions/setup@v0.1.0-rc.2
-      - uses: ilanh/openshell-annotate/actions/generate@v0.1.0-rc.2
+      - uses: ilanh/openshell-annotate/actions/setup@v0.1.0-rc.3
+      - uses: ilanh/openshell-annotate/actions/generate@v0.1.0-rc.3
         id: policy
         with:
           policy-out: openshell/policy.yaml
@@ -139,7 +139,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
-      - uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.2
+      - uses: ilanh/openshell-annotate/actions/check@v0.1.0-rc.3
         with:
           root: .
           policy: openshell/policy.yaml
@@ -150,12 +150,12 @@ jobs:
 Split steps (same pins):
 
 ```yaml
-      - uses: ilanh/openshell-annotate/actions/setup@v0.1.0-rc.2
-      - uses: ilanh/openshell-annotate/actions/drift@v0.1.0-rc.2
+      - uses: ilanh/openshell-annotate/actions/setup@v0.1.0-rc.3
+      - uses: ilanh/openshell-annotate/actions/drift@v0.1.0-rc.3
         with:
           policy: openshell/policy.yaml
           providers: openshell/providers.json
-      - uses: ilanh/openshell-annotate/actions/lint@v0.1.0-rc.2
+      - uses: ilanh/openshell-annotate/actions/lint@v0.1.0-rc.3
         with:
           policy: openshell/policy.yaml
           failure-threshold: warning
