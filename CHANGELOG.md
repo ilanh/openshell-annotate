@@ -6,6 +6,7 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 ## [Unreleased]
 
 - ci: `openshell-next` branch automation: a daily workflow merges main into `openshell-next`, moves its OpenShell pin to the newest upstream tag (prereleases included), runs the tests and reports on the tracking issue; `scripts/openshell-tags.sh` and `scripts/openshell-next.sh` do the same by hand
+- fix(ci): the `openshell-next` workflow runs main's copy of its scripts against the branch (`OPENSHELL_ANNOTATE_ROOT`), runs steps with `pipefail` so merge/bump/test failures fail the run, and its issue comment shows the pin and every failed step
 - fix(ci): `scripts/upstream-compat.sh` repoints both OpenShell crates (it left `openshell-policy` on the old tag) and runs on macOS; `upstream-compat.yml` also runs, non-blocking, on every push to main
 - chore(audit): ignore RUSTSEC-2026-0459 (`libsqlite3-sys` 0.37.0, pinned by OpenShell v0.1.7 through `sqlx` 0.9.0) in `.cargo/audit.toml` until OpenShell upgrades it (#76)
 - chore(deps): build against OpenShell v0.1.7 (`openshell-policy-schema`, `openshell-policy`); docs and generated policy headers now name v0.1.7

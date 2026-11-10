@@ -115,7 +115,11 @@ specific tag, `report` to comment even when nothing changed). It:
    adds a note to promote the branch (see "Promoting `openshell-next`" in `docs/RELEASING.md`).
 
 It uses only `GITHUB_TOKEN` (`contents: write` for `openshell-next`, `issues: write`, `actions: write` to dispatch CI,
-`pull-requests: read`). It never pushes to `main` or opens pull requests.
+`pull-requests: read`). It never pushes to `main` or opens pull requests. The branch tooling always comes from `main`:
+the workflow copies `scripts/openshell-next.sh` and `scripts/openshell-tags.sh` to a temp dir before checking out
+`openshell-next` and runs them against that checkout (`OPENSHELL_ANNOTATE_ROOT=<checkout>`), so a fix to the scripts
+takes effect on the next run and the branch does not need its own copy. Steps run with `shell: bash` (`-eo pipefail`),
+so a failure piped into `tee` still fails the step, the run, and the issue comment.
 
 Working on the branch by hand:
 
@@ -124,6 +128,7 @@ git fetch origin && git switch openshell-next && git pull --ff-only
 scripts/openshell-next.sh sync              # merge origin/main (what the workflow does first)
 scripts/openshell-next.sh update            # move the pin if upstream has a newer tag (edits files only)
 scripts/openshell-next.sh bump v0.1.8-pre.3 # or pin an exact tag
+OPENSHELL_ANNOTATE_ROOT=../other-checkout scripts/openshell-next.sh update  # work on another checkout
 TOOLCHAIN=1.94 scripts/ci-local.sh
 ```
 
