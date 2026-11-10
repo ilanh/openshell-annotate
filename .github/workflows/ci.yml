@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets .github/workflows/openshell-next.yml run CI on the commits it pushes (GITHUB_TOKEN pushes trigger nothing else).
+  workflow_dispatch:
 
 permissions:
   contents: read

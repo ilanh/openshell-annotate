@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Build and test openshell-annotate against a different version of OpenShell's policy-schema crate,
+# Build and test openshell-annotate against a different version of OpenShell's policy crates
+# (openshell-policy-schema and openshell-policy, both repointed to the same upstream commit),
 # WITHOUT touching this working tree (Cargo.toml / Cargo.lock stay pinned). Works on a temporary copy.
 #
 #   scripts/upstream-compat.sh latest-release   # newest stable vX.Y.Z tag of NVIDIA/OpenShell
-#   scripts/upstream-compat.sh latest-prerelease # newest vX.Y.Z-pre.N tag, if newer than latest stable (else latest-release)
+#   scripts/upstream-compat.sh latest-prerelease # newest tag incl. vX.Y.Z-pre.N (what openshell-next tracks; = latest-release when no newer prerelease)
 #   scripts/upstream-compat.sh main             # OpenShell HEAD
 #   scripts/upstream-compat.sh v0.1.7-pre.3     # any tag, branch or commit SHA
 #
@@ -18,27 +19,19 @@ TARGET="${1:-}"
 [ -n "$TARGET" ] || { echo "usage: $0 <latest-release|latest-prerelease|main|tag|branch|sha>" >&2; exit 2; }
 
 # --- resolve the target to a commit SHA ---------------------------------------------------------
+tag_sha() { git ls-remote "$REPO" "refs/tags/$1^{}" "refs/tags/$1" | awk 'NR==1{print $1}'; }
 case "$TARGET" in
   latest-prerelease)
-    # Newest vX.Y.Z-pre.N tag by version order, used only if it is newer than the newest stable tag.
-    TAGS=$(git ls-remote --tags --refs "$REPO" | sed "s#.*refs/tags/##") || true
-    STABLE=$(printf "%s\n" "$TAGS" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -1) || true
-    PRE=$(printf "%s\n" "$TAGS" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+-pre\.[0-9]+$" | sort -V | tail -1) || true
-    # A prerelease vX.Y.Z-pre.N precedes vX.Y.Z, so compare its base version against the stable tag.
-    if [ -n "${PRE:-}" ] && { [ -z "${STABLE:-}" ] || { [ "${PRE%-pre.*}" != "$STABLE" ] && [ "$(printf "%s\n%s\n" "$STABLE" "${PRE%-pre.*}" | sort -V | tail -1)" = "${PRE%-pre.*}" ]; }; }; then
-      LABEL="$PRE"
-    else
-      echo "note: no prerelease newer than ${STABLE:-<none>}; falling back to latest-release" >&2
-      LABEL="$STABLE"
-    fi
-    [ -n "${LABEL:-}" ] || { echo "could not find a release tag in $REPO" >&2; exit 2; }
-    SHA=$(git ls-remote "$REPO" "refs/tags/$LABEL^{}" "refs/tags/$LABEL" | awk "NR==1{print \$1}")
+    # Newest tag in release order (scripts/openshell-tags.sh): a vX.Y.Z-pre.N only when it is newer than the newest
+    # stable vX.Y.Z, otherwise that stable tag. This is the tag the `openshell-next` branch tracks.
+    LABEL=$(UPSTREAM_REPO="$REPO" scripts/openshell-tags.sh latest) || exit 2
+    scripts/openshell-tags.sh is-stable "$LABEL" && echo "note: no prerelease newer than $LABEL; using it" >&2
+    SHA=$(tag_sha "$LABEL")
     ;;
   latest-release)
     # Newest stable release tag (vX.Y.Z, no -pre suffix). ls-remote avoids API rate limits.
-    LABEL=$(git ls-remote --tags --refs "$REPO" | sed 's#.*refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1) || true
-    [ -n "${LABEL:-}" ] || { echo "could not find a stable release tag in $REPO" >&2; exit 2; }
-    SHA=$(git ls-remote "$REPO" "refs/tags/$LABEL^{}" "refs/tags/$LABEL" | awk 'NR==1{print $1}')
+    LABEL=$(UPSTREAM_REPO="$REPO" scripts/openshell-tags.sh latest-stable) || exit 2
+    SHA=$(tag_sha "$LABEL")
     ;;
   main)
     LABEL="main"
@@ -53,7 +46,7 @@ case "$TARGET" in
 esac
 [ -n "${SHA:-}" ] || { echo "could not resolve '$TARGET' in $REPO" >&2; exit 2; }
 
-PINNED=$(grep -E '^openshell-policy-schema' Cargo.toml | sed -E 's/.*tag = "([^"]+)".*/\1/')
+PINNED=$(scripts/openshell-tags.sh pinned)
 echo "==> upstream target: $TARGET ($LABEL) -> $SHA   (pinned in Cargo.toml: $PINNED)"
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
@@ -66,14 +59,16 @@ WORK="${XDG_CACHE_HOME:-$HOME/.cache}/openshell-annotate-upstream-compat-src"
 rm -rf "$WORK"; mkdir -p "$WORK"
 tar --exclude=./target --exclude=./.git -cf - . | tar -xf - -C "$WORK"
 cd "$WORK"
-# tag = "vX" -> rev = "<sha>" on the openshell-policy-schema line only; the lockfile is re-resolved.
-sed -i -E "/^openshell-policy-schema/ s/tag = \"[^\"]+\"/rev = \"$SHA\"/" Cargo.toml
-grep -q "rev = \"$SHA\"" Cargo.toml || { echo "failed to repoint the dependency in Cargo.toml" >&2; exit 2; }
+# tag = "vX" -> rev = "<sha>" on BOTH OpenShell crates (schema and gateway validator), so they build from the same
+# upstream commit; the lockfile is re-resolved. Portable sed (no -i) so this also runs on macOS.
+sed -E "/^openshell-policy(-schema)?[[:space:]]*=/ s/tag = \"[^\"]+\"/rev = \"$SHA\"/" Cargo.toml > Cargo.toml.new && mv Cargo.toml.new Cargo.toml
+[ "$(grep -cE "^openshell-policy(-schema)?[[:space:]]*=.*rev = \"$SHA\"" Cargo.toml)" = 2 ] ||
+  { echo "failed to repoint the OpenShell dependencies in Cargo.toml" >&2; exit 2; }
 [ -n "${CARGO_TARGET_DIR:-}" ] || export CARGO_TARGET_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/openshell-annotate-upstream-compat"
 
 run() { printf '\n==> %s\n' "$*"; "$@" || { echo "FAILED: $*"; return 1; }; }
 steps() {
-  run cargo update -p openshell-policy-schema &&
+  run cargo update -p openshell-policy-schema -p openshell-policy &&
     run cargo build --all-targets &&
     run cargo test &&
     run scripts/gen-docs.sh --check
