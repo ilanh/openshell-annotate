@@ -2111,7 +2111,7 @@ dependencies = [
 [[package]]
 name = "openshell-core"
 version = "0.0.0"
-source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.3#53b8eec29cadab70e11be88776cf14a0fc6a7fdd"
+source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.5#56d235056c8d59811d1d6bbc2bd6d16c9fdb3d73"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2146,7 +2146,7 @@ dependencies = [
 [[package]]
 name = "openshell-crypto"
 version = "0.0.0"
-source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.3#53b8eec29cadab70e11be88776cf14a0fc6a7fdd"
+source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.5#56d235056c8d59811d1d6bbc2bd6d16c9fdb3d73"
 dependencies = [
  "aws-lc-rs",
  "jsonwebtoken",
@@ -2164,7 +2164,7 @@ dependencies = [
 [[package]]
 name = "openshell-extension-core"
 version = "0.0.0"
-source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.3#53b8eec29cadab70e11be88776cf14a0fc6a7fdd"
+source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.5#56d235056c8d59811d1d6bbc2bd6d16c9fdb3d73"
 dependencies = [
  "hyper-util",
  "serde",
@@ -2177,7 +2177,7 @@ dependencies = [
 [[package]]
 name = "openshell-policy"
 version = "0.0.0"
-source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.3#53b8eec29cadab70e11be88776cf14a0fc6a7fdd"
+source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.5#56d235056c8d59811d1d6bbc2bd6d16c9fdb3d73"
 dependencies = [
  "hickory-proto",
  "miette",
@@ -2191,7 +2191,7 @@ dependencies = [
 [[package]]
 name = "openshell-policy-schema"
 version = "0.0.0"
-source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.3#53b8eec29cadab70e11be88776cf14a0fc6a7fdd"
+source = "git+https://github.com/NVIDIA/OpenShell?tag=v0.1.8-pre.5#56d235056c8d59811d1d6bbc2bd6d16c9fdb3d73"
 dependencies = [
  "miette",
  "noyalib",
