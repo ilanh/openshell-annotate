@@ -98,9 +98,11 @@ makes sense on that version. It exists so the next OpenShell is integrated, and 
 stable. A draft pull request `openshell-next` → `main` and an issue labelled `openshell-next` track it; the issue gets a
 comment for every new upstream tag.
 
-`.github/workflows/openshell-next.yml` runs daily (04:17 UTC; GitHub may start scheduled runs hours late or drop one under
-load, and the next day's run catches up, so dispatch it by hand when you need a bump now) and on manual dispatch (optional `tag` input to pin a
-specific tag, `report` to comment even when nothing changed). It:
+`.github/workflows/openshell-next.yml` runs twice daily (04:17 and 07:17 UTC) and on manual dispatch (optional `tag` input to pin a
+specific tag, `report` to comment even when nothing changed). The later schedule is a backup: GitHub may start scheduled
+runs hours late or drop one under load. The two slots share the `openshell-next` concurrency group (`cancel-in-progress:
+false`), so a delayed early run is not cancelled when the later one starts; the second run then no-ops (no push, no issue
+comment) if the pin is unchanged and everything already passed. Dispatch it by hand when you need a bump now. It:
 
 1. checks out `openshell-next` (recreating it from `main` if it was deleted) and merges `origin/main` into it with a
    signed-off merge commit. If both sides changed the pin it keeps the newer tag; any other conflict stops the run

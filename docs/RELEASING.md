@@ -62,7 +62,7 @@ before a tag exists.
 ## Promoting `openshell-next` when OpenShell ships stable
 
 `openshell-next` (see `docs/DEVELOPING.md`, "Tracking the next OpenShell release") builds against OpenShell
-prereleases. When upstream tags the stable `vX.Y.Z`, the daily workflow moves the branch to it and adds a "stable
+prereleases. When upstream tags the stable `vX.Y.Z`, the workflow (04:17 and 07:17 UTC) moves the branch to it and adds a "stable
 release" note to the tracking issue. To bring it to `main`:
 
 1. Read the upstream release notes and the compare link in that comment; tick the tracking PR's checklist.
