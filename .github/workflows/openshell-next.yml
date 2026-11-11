@@ -6,8 +6,9 @@ name: openshell-next
 # report on the tracking issue (label `openshell-next`). See docs/DEVELOPING.md ("Tracking the next OpenShell release").
 #
 # Pushes made with GITHUB_TOKEN do not trigger other workflows, so this job runs the test suite itself and then
-# dispatches ci.yml on the pushed commit (workflow_dispatch is the one event GITHUB_TOKEN may start), which puts the
-# required `check` / `audit` results on the tracking PR's head commit.
+# dispatches ci.yml on the pushed commit (workflow_dispatch is the one event GITHUB_TOKEN may start). That run posts
+# `CI (dispatched) / check` and `/ audit` commit statuses, which show on the tracking PR. The PR's own `pull_request`
+# runs for the pushed commit wait for "Approve workflows to run" (GitHub's rule for GITHUB_TOKEN updates since 2026-06-11).
 # The scripts that move the branch (scripts/openshell-next.sh, scripts/openshell-tags.sh) always come from main: they
 # are copied to a temp dir before openshell-next is checked out and run against that checkout (OPENSHELL_ANNOTATE_ROOT).
 # Local equivalent: scripts/openshell-next.sh sync && scripts/openshell-next.sh update
@@ -184,7 +185,7 @@ jobs:
             echo "| Merge of main | $(icon "$SYNC") |"
             echo "| Pin update | $(icon "$BUMP")$([ "$CHANGED" = true ] || [ "$BUMP" != success ] || echo ", already on the newest tag") |"
             echo "| Tests (fmt, clippy, test, docs) | $(icon "$TEST") |"
-            echo "| Branch | [\`$BRANCH\` @ \`${sha:0:12}\`]($REPO_URL/commit/$sha)$([ "$PUSHED" = true ] && echo ", pushed; ci.yml dispatched") |"
+            echo "| Branch | [\`$BRANCH\` @ \`${sha:0:12}\`]($REPO_URL/commit/$sha)$([ "$PUSHED" = true ] && echo ", pushed; ci.yml dispatched (reports as \`CI (dispatched)\` statuses; the PR's own checks wait for approval)") |"
             echo "| Tracking PR | ${pr:-none open: [open one]($REPO_URL/compare/main...$BRANCH?expand=1) as a draft} |"
             echo "| Run | $RUN_URL |"
             if [ "$SYNC" = failure ]; then
