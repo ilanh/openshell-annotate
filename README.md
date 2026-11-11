@@ -8,8 +8,23 @@ un-annotated calls, and gates CI on drift.
 > **Independent community project.** openshell-annotate is not affiliated with, endorsed by, or sponsored by
 > NVIDIA. It uses NVIDIA OpenShell's public policy schema crate (Apache-2.0) to validate what it generates.
 
-Status: early prototype (version 0.1.0). Targets OpenShell policy schema v1
-(`openshell-policy-schema` @ v0.1.7). Licensed under Apache-2.0.
+Early pre-release **v0.1.0-rc.3** (targets OpenShell policy schema v1, `openshell-policy-schema` @ v0.1.7).
+Licensed under Apache-2.0.
+
+## Try it in two minutes
+
+You do not need OpenShell installed to run `scan`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ilanh/openshell-annotate/v0.1.0-rc.3/install.sh | sh -s -- --version v0.1.0-rc.3
+git clone --depth 1 --branch v0.1.0-rc.3 https://github.com/ilanh/openshell-annotate.git /tmp/openshell-annotate-try
+openshell-annotate scan /tmp/openshell-annotate-try/examples/polyglot
+```
+
+The installer puts only the binary on your `PATH` (not the `examples/` tree), so use a shallow clone for the bundled
+sample—or run `scan`, `lint`, or `generate` on a repository you already have. Feedback is welcome via the
+[Feedback / usage report](https://github.com/ilanh/openshell-annotate/issues/new?template=feedback.yml) issue form
+or [Discussions](https://github.com/ilanh/openshell-annotate/discussions) once they are enabled.
 
 ## GitHub Actions
 
@@ -33,17 +48,27 @@ The combined `check` action works from other repositories on `main` and in relea
 
 ## Install
 
-Prebuilt binaries (Linux and macOS, x86_64 and arm64) and a container image are attached to each
-[release](https://github.com/ilanh/openshell-annotate/releases) once one is published; see [docs/RELEASING.md](docs/RELEASING.md)
-for installing and for verifying them with `gh attestation verify`:
+Prebuilt binaries (Linux and macOS, x86_64 and arm64; **no Windows prebuild yet**—OpenShell itself is mainly used on
+Linux/macOS or via WSL on Windows) and a container image are attached to each
+[release](https://github.com/ilanh/openshell-annotate/releases); see [docs/RELEASING.md](docs/RELEASING.md) for verifying
+downloads with `gh attestation verify`:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/ilanh/openshell-annotate/main/install.sh | sh
-docker run --rm ghcr.io/ilanh/openshell-annotate:<version> --version
+curl -fsSL https://raw.githubusercontent.com/ilanh/openshell-annotate/v0.1.0-rc.3/install.sh | sh -s -- --version v0.1.0-rc.3
+docker run --rm ghcr.io/ilanh/openshell-annotate:0.1.0-rc.3 --version
 ```
 
-Or build from source (Rust 1.94+ and a C compiler, because the tree-sitter grammars are C code; the OpenShell schema crate
-is fetched from GitHub by cargo):
+Pin `--version` to a release tag until a stable SemVer release exists (`version: latest` in CI behaves the same way).
+
+**Not on [crates.io](https://crates.io/).** The crate sets `publish = false` and depends on NVIDIA OpenShell crates via
+git tags, so `cargo install openshell-annotate` from crates.io will not work. Install a tagged checkout instead (Rust 1.94+,
+a C compiler for tree-sitter):
+
+```
+cargo install --git https://github.com/ilanh/openshell-annotate --tag v0.1.0-rc.3 --locked
+```
+
+Or clone and build locally:
 
 ```
 git clone https://github.com/ilanh/openshell-annotate && cd openshell-annotate
@@ -337,7 +362,8 @@ scripts/gen-docs.sh --check                  # docs/CLI.md and docs/DIRECTIVES.m
 
 Full guide (prerequisites, a hands-on quick start, Docker, the sandbox flow, branch workflow): [docs/DEVELOPING.md](docs/DEVELOPING.md).
 
-Contributions need a DCO sign-off, see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
+Contributions need a DCO sign-off, see [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+Security reports: [SECURITY.md](SECURITY.md).
 
 ## Docker (local build)
 
