@@ -5,6 +5,7 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+- docs: README try-path and install notes for early testers; feedback issue template and Discussions contact link; Contributor Covenant; SECURITY.md supported versions
 - ci: `openshell-next` branch automation: a daily workflow merges main into `openshell-next`, moves its OpenShell pin to the newest upstream tag (prereleases included), runs the tests and reports on the tracking issue; `scripts/openshell-tags.sh` and `scripts/openshell-next.sh` do the same by hand
 - fix(ci): CI runs dispatched by the `openshell-next` workflow publish `CI (dispatched) / check|audit` commit statuses, so the tracking PR shows their result while its own `pull_request` runs wait for approval (GitHub's rule for `GITHUB_TOKEN` pushes)
 - fix(ci): the `openshell-next` workflow runs main's copy of its scripts against the branch (`OPENSHELL_ANNOTATE_ROOT`), runs steps with `pipefail` so merge/bump/test failures fail the run, and its issue comment shows the pin and every failed step

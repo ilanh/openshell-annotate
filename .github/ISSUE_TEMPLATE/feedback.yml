@@ -1,0 +1,39 @@
+name: Feedback / usage report
+description: What happened when you tried openshell-annotate (praise, confusion, or a near-miss)
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Please do not include secrets or real API keys.
+        Questions that are not a bug or a feature request also fit in [Discussions](https://github.com/ilanh/openshell-annotate/discussions).
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of feedback is this?
+      options:
+        - I tried it and something was confusing
+        - It generated a policy I would not ship
+        - Lint missed or over-reported something
+        - Install or docs
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: openshell-annotate version
+      description: Output of `openshell-annotate --version`
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you try, and what should we know?
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, and OpenShell / NemoClaw version if you used them.
