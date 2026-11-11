@@ -5,7 +5,10 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+- ci: the `openshell-next` workflow also runs at 07:17 UTC as a backup for the 04:17 UTC schedule, because GitHub may delay or drop a scheduled run; both slots share one concurrency group and no-op when the pin is unchanged
+- docs: README try-path and install notes for early testers; feedback issue template and Discussions contact link; Contributor Covenant; SECURITY.md supported versions
 - ci: `openshell-next` branch automation: a daily workflow merges main into `openshell-next`, moves its OpenShell pin to the newest upstream tag (prereleases included), runs the tests and reports on the tracking issue; `scripts/openshell-tags.sh` and `scripts/openshell-next.sh` do the same by hand
+- fix(ci): CI runs dispatched by the `openshell-next` workflow publish `CI (dispatched) / check|audit` commit statuses, so the tracking PR shows their result while its own `pull_request` runs wait for approval (GitHub's rule for `GITHUB_TOKEN` pushes)
 - fix(ci): the `openshell-next` workflow runs main's copy of its scripts against the branch (`OPENSHELL_ANNOTATE_ROOT`), runs steps with `pipefail` so merge/bump/test failures fail the run, and its issue comment shows the pin and every failed step
 - fix(ci): `scripts/upstream-compat.sh` repoints both OpenShell crates (it left `openshell-policy` on the old tag) and runs on macOS; `upstream-compat.yml` also runs, non-blocking, on every push to main
 - chore(audit): ignore RUSTSEC-2026-0459 (`libsqlite3-sys` 0.37.0, pinned by OpenShell v0.1.7 through `sqlx` 0.9.0) in `.cargo/audit.toml` until OpenShell upgrades it (#76)

@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Questions and ideas (Discussions)
+    url: https://github.com/ilanh/openshell-annotate/discussions
+    about: Ask questions, share what you tried, or suggest improvements (once Discussions are enabled on the repo).
   - name: Security vulnerability
     url: https://github.com/ilanh/openshell-annotate/blob/main/SECURITY.md
     about: Please report security problems privately as described in SECURITY.md, not in a public issue.

@@ -98,8 +98,11 @@ makes sense on that version. It exists so the next OpenShell is integrated, and 
 stable. A draft pull request `openshell-next` → `main` and an issue labelled `openshell-next` track it; the issue gets a
 comment for every new upstream tag.
 
-`.github/workflows/openshell-next.yml` runs daily (04:17 UTC) and on manual dispatch (optional `tag` input to pin a
-specific tag, `report` to comment even when nothing changed). It:
+`.github/workflows/openshell-next.yml` runs twice daily (04:17 and 07:17 UTC) and on manual dispatch (optional `tag` input to pin a
+specific tag, `report` to comment even when nothing changed). The later schedule is a backup: GitHub may start scheduled
+runs hours late or drop one under load. The two slots share the `openshell-next` concurrency group (`cancel-in-progress:
+false`), so a delayed early run is not cancelled when the later one starts; the second run then no-ops (no push, no issue
+comment) if the pin is unchanged and everything already passed. Dispatch it by hand when you need a bump now. It:
 
 1. checks out `openshell-next` (recreating it from `main` if it was deleted) and merges `origin/main` into it with a
    signed-off merge commit. If both sides changed the pin it keeps the newer tag; any other conflict stops the run
@@ -108,14 +111,19 @@ specific tag, `report` to comment even when nothing changed). It:
    `github-actions[bot]` with a `Signed-off-by` line;
 3. runs `cargo fmt --check`, clippy, `cargo test --locked` and `scripts/gen-docs.sh --check` in the same job;
 4. pushes the branch, even when the tests fail (the branch mirrors upstream; the fix is made on top), then dispatches
-   `ci.yml` on it. Pushes with `GITHUB_TOKEN` start no other workflow, so this is what puts `check` and `audit` on the
-   tracking PR's head commit;
+   `ci.yml` on it, because a push with `GITHUB_TOKEN` starts no `push` workflow. The dispatched run publishes its result
+   as the commit statuses `CI (dispatched) / check` and `CI (dispatched) / audit`, which is what the tracking PR shows.
+   The PR's own `pull_request` runs for that commit (CI, Upstream compatibility, Release) are created *awaiting
+   approval*: since 2026-06-11 GitHub holds every `pull_request` run caused by a `GITHUB_TOKEN` update until someone with
+   write access selects **Approve workflows to run** on the PR, whatever the fork-approval setting says. Approving is
+   optional while the PR is a draft; the named `check` / `audit` checks appear only after that, or after a person
+   pushes to the branch;
 5. comments on the tracking issue when the pin moved, the branch was created, or the merge or tests failed: the old and
    new tag, links to the upstream release and compare view, the test result and log tail, and the run. A **stable** tag
    adds a note to promote the branch (see "Promoting `openshell-next`" in `docs/RELEASING.md`).
 
 It uses only `GITHUB_TOKEN` (`contents: write` for `openshell-next`, `issues: write`, `actions: write` to dispatch CI,
-`pull-requests: read`). It never pushes to `main` or opens pull requests. The branch tooling always comes from `main`:
+`pull-requests: read`; the dispatched CI run adds `statuses: write` for its status job). It never pushes to `main` or opens pull requests. The branch tooling always comes from `main`:
 the workflow copies `scripts/openshell-next.sh` and `scripts/openshell-tags.sh` to a temp dir before checking out
 `openshell-next` and runs them against that checkout (`OPENSHELL_ANNOTATE_ROOT=<checkout>`), so a fix to the scripts
 takes effect on the next run and the branch does not need its own copy. Steps run with `shell: bash` (`-eo pipefail`),

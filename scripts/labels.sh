@@ -17,6 +17,7 @@ LABELS=(
   "providers|5319e7|Provider detection and profiles"
   "languages|bfdadc|Source language and comment support"
   "good first issue|7057ff|Good for newcomers"
+  "feedback|ededed|Early-tester feedback and usage reports"
   "upstream-openshell|b60205|Behaviour of OpenShell itself; tracked locally, not filed upstream"
   "upstream-compat|e99695|Breakage against a newer OpenShell (opened by the weekly job)"
   "openshell-next|1d76db|Tracking the next OpenShell release on the openshell-next branch"

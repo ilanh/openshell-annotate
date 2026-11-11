@@ -1,6 +1,7 @@
 # Contributing
 
 Thanks for helping. openshell-annotate is an independent community project (not affiliated with NVIDIA).
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md) in issues, pull requests, and discussions.
 
 ## Workflow: branches and pull requests only
 
@@ -31,8 +32,8 @@ Never force-push or delete it. Details: `docs/DEVELOPING.md`, "Tracking the next
 
 GitHub issues are how we track all work: bugs, features and follow-ups.
 
-1. Search existing issues first, then open one with the **Bug report** or **Feature request** form (blank issues are
-   disabled; security problems go through `SECURITY.md`, not an issue).
+1. Search existing issues first, then open one with the **Bug report**, **Feature request**, or **Feedback /
+   usage report** form (blank issues are disabled; security problems go through `SECURITY.md`, not an issue).
 2. Labels: `bug` or `enhancement`, plus an area (`scan`, `generate`, `lint`, `drift`, `diff-logs`, `providers`,
    `languages`, `docs`). `upstream-openshell` marks behaviour of OpenShell itself that we only track locally;
    `upstream-compat` is used by the weekly compatibility job and `openshell-next` by the tracking issue for the next

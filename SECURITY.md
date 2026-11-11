@@ -12,7 +12,9 @@ OpenShell itself should be reported to the OpenShell project (see its `SECURITY.
 
 ## Supported versions
 
-Only the latest commit on `main` (the project has no releases yet).
+The latest [pre-release](https://github.com/ilanh/openshell-annotate/releases) tag (currently **v0.1.0-rc.3**)
+and the latest commit on `main`. Older pre-releases and arbitrary commits are best-effort only; please
+reproduce on a supported ref when you can.
 
 ## Reporting a vulnerability
 
