@@ -7,14 +7,17 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 - ci: the `openshell-next` workflow also runs at 07:17 UTC as a backup for the 04:17 UTC schedule, because GitHub may delay or drop a scheduled run; both slots share one concurrency group and no-op when the pin is unchanged
 - docs: README try-path and install notes for early testers; feedback issue template and Discussions contact link; Contributor Covenant; SECURITY.md supported versions
-- ci: `openshell-next` branch automation: a daily workflow merges main into `openshell-next`, moves its OpenShell pin to the newest upstream tag (prereleases included), runs the tests and reports on the tracking issue; `scripts/openshell-tags.sh` and `scripts/openshell-next.sh` do the same by hand
 - fix(ci): CI runs dispatched by the `openshell-next` workflow publish `CI (dispatched) / check|audit` commit statuses, so the tracking PR shows their result while its own `pull_request` runs wait for approval (GitHub's rule for `GITHUB_TOKEN` pushes)
 - fix(ci): the `openshell-next` workflow runs main's copy of its scripts against the branch (`OPENSHELL_ANNOTATE_ROOT`), runs steps with `pipefail` so merge/bump/test failures fail the run, and its issue comment shows the pin and every failed step
+- ci: `openshell-next` branch automation: a daily workflow merges main into `openshell-next`, moves its OpenShell pin to the newest upstream tag (prereleases included), runs the tests and reports on the tracking issue; `scripts/openshell-tags.sh` and `scripts/openshell-next.sh` do the same by hand
 - fix(ci): `scripts/upstream-compat.sh` repoints both OpenShell crates (it left `openshell-policy` on the old tag) and runs on macOS; `upstream-compat.yml` also runs, non-blocking, on every push to main
-- chore(audit): ignore RUSTSEC-2026-0459 (`libsqlite3-sys` 0.37.0, pinned by OpenShell v0.1.7 through `sqlx` 0.9.0) in `.cargo/audit.toml` until OpenShell upgrades it (#76)
-- chore(deps): build against OpenShell v0.1.7 (`openshell-policy-schema`, `openshell-policy`); docs and generated policy headers now name v0.1.7
 - docs(actions): `docs/GITHUB_ACTIONS.md` is now a setup and usage guide (versions, recipes, troubleshooting); its inputs/outputs tables are generated from `action.yml` by `scripts/gen-actions-docs.sh` and checked in CI
+- chore(audit): ignore RUSTSEC-2026-0459 (`libsqlite3-sys` 0.37.0, pinned by OpenShell v0.1.7 through `sqlx` 0.9.0) in `.cargo/audit.toml` until OpenShell upgrades it
+- test: add real OpenShell v0.1.7 OCSF 1.8.0 log fixtures (`tests/fixtures/logs/ocsf-1.8.0.jsonl` and a matching annotated app) and a `diff-logs` CLI test with a plain-text golden
 - fix(diff-logs): ignore OCSF Network Activity Refuse records (policy DNS `policy_dns_ineligible`) that have no port, so OCSF JSON and shorthand logs report the same denials
+- chore(deps): build against OpenShell v0.1.7 (`openshell-policy-schema`, `openshell-policy`); docs and generated policy headers now name v0.1.7
+- fix(release): `scripts/release.sh` bumps the Cargo.toml `[package]` version with portable awk (GNU-only `sed 0,/re/` was a silent no-op on macOS) and fails loudly if Cargo.toml or Cargo.lock is not at the requested version
+- fix(actions): `actions/check` works for external consumers; nested relative `uses:` resolved against the caller's workspace, so the setup/drift/lint logic now lives in `actions/lib/*.sh` and is invoked via `github.action_path`
 
 ## [0.1.0-rc.3] - 2026-11-09
 
