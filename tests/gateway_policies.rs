@@ -56,3 +56,21 @@ fn example_and_golden_policies_pass_the_gateway_validator() {
         failed.join("\n")
     );
 }
+
+/// OpenShell v0.1.8 (NVIDIA/OpenShell#5336): `websocket_credential_rewrite: true` needs `protocol: websocket`.
+/// `lint --policy`, `drift` and `generate` run the gateway validator, so they report it with the upstream hint.
+#[test]
+fn websocket_credential_rewrite_needs_the_websocket_protocol() {
+    let policy = |protocol: &str| {
+        format!(
+            "version: 1\nnetwork_policies:\n  gw:\n    binaries:\n      - path: /usr/bin/node\n    endpoints:\n      - host: gateway.example.com\n        port: 443\n        protocol: {protocol}\n        access: full\n        websocket_credential_rewrite: true\n"
+        )
+    };
+    let rest = openshell_annotate::validate::gateway_violations(&policy("rest")).unwrap();
+    assert!(
+        rest.iter().any(|v| v.contains("use protocol: websocket")),
+        "{rest:?}"
+    );
+    let ws = openshell_annotate::validate::gateway_violations(&policy("websocket")).unwrap();
+    assert!(ws.is_empty(), "{ws:?}");
+}

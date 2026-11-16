@@ -520,6 +520,17 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
         for m in validate::check_directive(d) {
             out.push(directive_finding(&d.file, d.line, m));
         }
+        if let Kind::Egress { host, .. } = &d.kind {
+            if let Some(m) = validate::host_warning(host) {
+                out.push(Finding::new(
+                    d.file.clone(),
+                    d.line,
+                    Severity::Warning,
+                    "directive",
+                    m,
+                ));
+            }
+        }
     }
     let provider_envs: BTreeSet<&str> = scan
         .directives
@@ -685,6 +696,9 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
             }
         }
     }
+    if cfg.lint.categories.is_empty() || cfg.lint.categories.iter().any(|c| c == "net") {
+        out.extend(websocket_on_rest(scan, cfg));
+    }
     if cfg.lint.fs_dynamic == "summary" && !dyn_fs.is_empty() && !fs_roots.is_empty() {
         let total: usize = dyn_fs.iter().map(|d| d.1.len()).sum();
         dyn_fs.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then(a.0.cmp(&b.0)));
@@ -717,6 +731,90 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
         out.push(f);
     }
     out.sort_by(|a, b| (a.severity, &a.file, a.line).cmp(&(b.severity, &b.file, b.line)));
+    out
+}
+
+/// L7 protocol an `egress` directive emits: its `protocol=`, else `rest` when `access=` or `allow=` turns on
+/// inspection, else `None` (L4 passthrough).
+fn egress_protocol(d: &Directive) -> Option<String> {
+    if let Some(p) = d.attr("protocol") {
+        return Some(p.to_ascii_lowercase());
+    }
+    (d.attr("access").is_some() || d.attrs.multi.contains_key("allow")).then(|| "rest".to_string())
+}
+
+/// Warns about `ws://` / `wss://` URL literals whose host and port are declared only by inspected `rest` egress
+/// directives. Since OpenShell v0.1.8 (NVIDIA/OpenShell#5336) a REST endpoint answers WebSocket upgrade requests
+/// with 403, so these clients need `protocol=websocket`. Comment-only lines and excluded files are skipped.
+fn websocket_on_rest(scan: &Scan, cfg: &Config) -> Vec<Finding> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| {
+        Regex::new(r"\b(wss?)://([A-Za-z0-9][A-Za-z0-9.\-]*[A-Za-z0-9])(?::(\d+))?").unwrap()
+    });
+    let egress: Vec<(&Directive, &str, &[u16], Option<String>)> = scan
+        .directives
+        .iter()
+        .filter_map(|d| match &d.kind {
+            Kind::Egress { host, ports } => {
+                Some((d, host.as_str(), ports.as_slice(), egress_protocol(d)))
+            }
+            _ => None,
+        })
+        .collect();
+    let mut out = Vec::new();
+    for src in &scan.sources {
+        if excluded(&src.rel, cfg) {
+            continue;
+        }
+        let ignored = |line: usize| {
+            scan.directives.iter().any(|d| {
+                d.file == src.rel
+                    && matches!(d.kind, Kind::Ignore)
+                    && d.covers().contains(&"net")
+                    && (d.file_scoped() || (d.line <= line && line - d.line <= cfg.lint.window))
+            })
+        };
+        for (i, raw) in src.lexed.raw.iter().enumerate() {
+            if src.lexed.code.get(i).is_some_and(|c| c.trim().is_empty()) || ignored(i + 1) {
+                continue;
+            }
+            for c in re.captures_iter(raw) {
+                let host = c[2].to_ascii_lowercase();
+                let port: u16 = c
+                    .get(3)
+                    .and_then(|m| m.as_str().parse().ok())
+                    .unwrap_or(if &c[1] == "wss" { 443 } else { 80 });
+                let matching: Vec<_> = egress
+                    .iter()
+                    .filter(|(_, h, ports, _)| {
+                        crate::diff_logs::host_matches(h, &host) && ports.contains(&port)
+                    })
+                    .collect();
+                let Some((d, ..)) = matching.iter().find(|e| e.3.as_deref() == Some("rest")) else {
+                    continue;
+                };
+                if matching.iter().any(|e| e.3.as_deref() != Some("rest")) {
+                    continue;
+                }
+                out.push(
+                    Finding::new(
+                        src.rel.clone(),
+                        i + 1,
+                        Severity::Warning,
+                        "net",
+                        format!(
+                            "WebSocket URL {}://{host}:{port} is declared as `protocol=rest` ({}:{}); OpenShell v0.1.8+ answers WebSocket upgrades on REST endpoints with 403: use `protocol=websocket` (with `access=` or `allow=`)",
+                            &c[1], d.file, d.line
+                        ),
+                    )
+                    .at(Some(Span {
+                        col: c.get(0).unwrap().start(),
+                        end: Some(c.get(0).unwrap().end()),
+                    })),
+                );
+            }
+        }
+    }
     out
 }
 

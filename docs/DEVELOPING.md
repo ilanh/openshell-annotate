@@ -8,10 +8,10 @@ build that downloads crates takes longer.
 
 | Needed for | What |
 |---|---|
-| everything | Git, a C compiler (`build-essential` / Xcode command line tools: the tree-sitter grammars are C), network access to crates.io and github.com (the OpenShell schema crate is a git dependency pinned to the `v0.1.7` tag) |
+| everything | Git, a C compiler (`build-essential` / Xcode command line tools: the tree-sitter grammars are C), network access to crates.io and github.com (the OpenShell schema crate is a git dependency pinned to the `v0.1.8` tag) |
 | build and test | Rust **1.94** or newer through [rustup](https://rustup.rs). CI pins 1.94 |
 | Docker image (optional) | Docker with BuildKit |
-| sandbox flow (optional) | the `openshell` CLI and `openshell-prover` at 0.1.7, a running OpenShell gateway, and Docker (see section 7) |
+| sandbox flow (optional) | the `openshell` CLI and `openshell-prover` at 0.1.8, a running OpenShell gateway, and Docker (see section 7) |
 
 ```
 rustup toolchain install 1.94 --profile minimal --component rustfmt,clippy
@@ -43,6 +43,8 @@ Expected: four result lines, all `ok` (26 unit tests, 30 CLI tests in `tests/cli
   file for `diff-logs`).
 - When you change generated output on purpose, edit the golden file by hand and review the diff. Nothing rewrites goldens.
 - Add a test for every new directive, attribute, lint pattern or error message.
+- The GitHub Actions' shell helpers have shell tests in `tests/actions/` (run them directly, e.g.
+  `tests/actions/setup-resolve.sh`; they need bash, curl and python3); `actions-selftest.yml` runs them in CI.
 
 ## 4. Run what CI runs
 
@@ -93,7 +95,7 @@ sorts after its own prereleases (`latest`, `latest-stable`, `list`, `pinned`, `n
 ### Tracking the next OpenShell release (`openshell-next`)
 
 `openshell-next` is the one long-lived branch besides `main`. It is `main` plus the OpenShell pin moved to the newest
-upstream tag, prereleases included (for example `v0.1.8-pre.3` while `main` is on `v0.1.7`), plus any fix that only
+upstream tag, prereleases included (for example `v0.1.9-pre.3` while `main` is on `v0.1.8`), plus any fix that only
 makes sense on that version. It exists so the next OpenShell is integrated, and its breakage fixed, before it ships as
 stable. A draft pull request `openshell-next` → `main` and an issue labelled `openshell-next` track it; the issue gets a
 comment for every new upstream tag.
@@ -196,8 +198,10 @@ openshell-annotate diff-logs path/to/sandbox.log --write  # inserts directives a
                                                           # otherwise writes openshell/observed-egress.sh (scanned like any source: review or delete it)
 ```
 
-Sample logs for both formats are in `tests/fixtures/logs/`. Filesystem denials are not logged by OpenShell 0.1.7, so
-`diff-logs` only sees network and L7 events.
+Sample logs for both formats are in `tests/fixtures/logs/`. Filesystem denials are not logged by OpenShell 0.1.8, so
+`diff-logs` only sees network and L7 events. It reads no sandbox attribution fields, so OpenShell v0.1.8 moving
+`container.uid`/`container.name` to `device.container.*` (NVIDIA/OpenShell#5048) needs no change; the OCSF fixture
+is real v0.1.7 output.
 
 ## 6. Docker image
 
@@ -222,7 +226,7 @@ scripts/flow.sh /path/to/project --diff-logs sandbox.log          # + diff-logs 
 scripts/flow.sh /path/to/project --image my-image:tag --run-seconds 30 --exercise exercise.js -- sleep 600
 ```
 
-It needs `openshell` and `openshell-prover` 0.1.7 on PATH and a connected gateway (`openshell status` shows `Connected`), and
+It needs `openshell` and `openshell-prover` 0.1.8 on PATH and a connected gateway (`openshell status` shows `Connected`), and
 `OPENSHELL_ANNOTATE=/path/to/binary` if the binary is not on PATH. The image's interpreter paths must be real executables
 (not symlinks) and match `[languages]` in `openshell-annotate.toml`, because OpenShell matches the resolved binary path.
 A bare `sleep` workload produces no traffic and so no events: drive the sandbox with `--exercise FILE.js` (run with `node -e`),
@@ -268,4 +272,4 @@ public repo or a paid plan). `.github/rulesets/protect-openshell-next.json` bloc
 | `docs are stale` | run `scripts/gen-docs.sh` and commit `docs/` |
 | `docs/GITHUB_ACTIONS.md is out of date with actions/*/action.yml` | run `scripts/gen-actions-docs.sh` and commit it; add a `BEGIN/END actions-docs <name>` section for a new action |
 | sandbox probes get `403` from `api.github.com` | unauthenticated GitHub API rate limit (60 requests per hour per IP), not a policy decision; wait for the reset or use another host |
-| `openshell-prover: not found` in `flow.sh` | install the OpenShell 0.1.7 tools; the static commands (`scan`, `generate`, `lint`, `drift`, `diff-logs`) do not need them |
+| `openshell-prover: not found` in `flow.sh` | install the OpenShell 0.1.8 tools; the static commands (`scan`, `generate`, `lint`, `drift`, `diff-logs`) do not need them |

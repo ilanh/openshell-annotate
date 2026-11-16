@@ -2206,3 +2206,69 @@ fn diff_logs_reads_openshell_0_1_7_ocsf_1_8_0_records() {
     assert_eq!(o.status.code(), Some(1), "{}", err(&o));
     golden("diff_logs_ocsf_1_8_0_plain.txt", &out(&o));
 }
+
+/// OpenShell v0.1.8 (NVIDIA/OpenShell#5336): a REST endpoint answers WebSocket upgrades with 403, so lint warns
+/// about `ws://`/`wss://` URLs declared only by an inspected `rest` egress, and not once `protocol=websocket` is used.
+#[test]
+fn lint_warns_about_websocket_urls_on_rest_egress() {
+    let t = tempfile::tempdir().unwrap();
+    let js = |attrs: &str| {
+        format!(
+            "// @openshell egress stream.acme-w.dev:443 {attrs} reason=\"live feed\"\nconst ws = new WebSocket(\"wss://stream.acme-w.dev/feed\");\n// wss://stream.acme-w.dev/in-a-comment\n"
+        )
+    };
+    std::fs::write(t.path().join("feed.js"), js("access=read-only")).unwrap();
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
+    assert!(
+        s.contains("feed.js:2: warning[net]: WebSocket URL wss://stream.acme-w.dev:443 is declared as `protocol=rest` (feed.js:1)"),
+        "{s}"
+    );
+    assert!(!s.contains("feed.js:3"), "comment lines are skipped: {s}");
+    std::fs::write(
+        t.path().join("feed.js"),
+        js("protocol=websocket access=read-only"),
+    )
+    .unwrap();
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
+    assert!(!s.contains("WebSocket URL"), "{s}");
+    // L4 passthrough (no inspection) is not affected
+    std::fs::write(t.path().join("feed.js"), js("")).unwrap();
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
+    assert!(!s.contains("WebSocket URL"), "{s}");
+}
+
+/// OpenShell v0.1.8 (NVIDIA/OpenShell#5101) evaluates IPv4-mapped IPv6 destinations as IPv4: lint warns about such
+/// hosts in a policy file.
+#[test]
+fn lint_policy_warns_about_ipv4_mapped_hosts() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("a.js"), "console.log(1)\n").unwrap();
+    std::fs::write(
+        t.path().join("p.yaml"),
+        "version: 1\nnetwork_policies:\n  db:\n    endpoints:\n      - host: \"::ffff:203.0.113.7\"\n        port: 5432\n    binaries:\n      - path: /usr/bin/psql\n",
+    )
+    .unwrap();
+    let o = run(
+        t.path(),
+        &["lint", "--format", "compact", "--policy", "p.yaml"],
+    );
+    let s = out(&o);
+    assert!(
+        s.contains("IPv4-mapped IPv6 address") && s.contains("use `203.0.113.7`"),
+        "{s}{}",
+        err(&o)
+    );
+    // and in an egress directive
+    std::fs::write(
+        t.path().join("a.js"),
+        "// @openshell egress [::ffff:203.0.113.7]:5432 reason=\"db\"\nconsole.log(1)\n",
+    )
+    .unwrap();
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
+    assert!(
+        s.contains(
+            "a.js:1: warning[directive]: `[::ffff:203.0.113.7]` is an IPv4-mapped IPv6 address"
+        ),
+        "{s}"
+    );
+}
