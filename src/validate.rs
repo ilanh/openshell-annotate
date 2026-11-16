@@ -69,6 +69,16 @@ pub fn check_host(host: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Returns a warning when `host` is an IPv4-mapped IPv6 address such as `::ffff:203.0.113.7`.
+///
+/// Since OpenShell v0.1.8 (NVIDIA/OpenShell#5101) transparent TCP connections to such destinations are evaluated as
+/// IPv4, so a rule has to name the IPv4 address. Brackets are ignored.
+pub fn host_warning(host: &str) -> Option<String> {
+    let h = host.trim_matches(|c| c == '[' || c == ']');
+    let v4 = h.parse::<std::net::Ipv6Addr>().ok()?.to_ipv4_mapped()?;
+    Some(format!("`{host}` is an IPv4-mapped IPv6 address; OpenShell v0.1.8+ evaluates these destinations as IPv4, so the rule never matches: use `{v4}`"))
+}
+
 /// Checks a `filesystem_policy` path; `write` is true for `read_write` entries.
 ///
 /// # Errors
@@ -387,6 +397,9 @@ pub fn check_document(doc: &PolicyDocument) -> (Vec<String>, Vec<String>) {
                 if let Err(m) = check_host(&ep.host) {
                     errs.push(format!("{at}: {m}"));
                 }
+                if let Some(m) = host_warning(&ep.host) {
+                    warns.push(format!("{at}: {m}"));
+                }
             }
             if ep.port != 0 && !ep.ports.is_empty() {
                 errs.push(format!("{at}: `port` and `ports` are mutually exclusive"));
@@ -464,6 +477,18 @@ mod tests {
         assert!(check_host("169.254.169.254").is_err());
         assert!(check_host("127.0.0.1").is_err());
         assert!(check_host("bad host").is_err());
+    }
+
+    #[test]
+    fn ipv4_mapped_hosts_warn() {
+        assert!(host_warning("::ffff:203.0.113.7")
+            .unwrap()
+            .contains("use `203.0.113.7`"));
+        assert!(host_warning("[::FFFF:203.0.113.7]").is_some());
+        assert!(host_warning("::ffff:cb00:7107").is_some());
+        assert!(host_warning("203.0.113.7").is_none());
+        assert!(host_warning("2001:db8::1").is_none());
+        assert!(host_warning("api.example.com").is_none());
     }
 
     #[test]

@@ -5,6 +5,7 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+- feat(lint): warn about OpenShell v0.1.8 pitfalls: `ws://`/`wss://` URL literals declared only by a `rest` egress (REST endpoints answer WebSocket upgrades with 403), and IPv4-mapped IPv6 hosts (`::ffff:a.b.c.d`, evaluated as IPv4) in egress directives and policy files; README notes that symlinked filesystem paths (fail launch since v0.1.8) cannot be detected statically
 - ci: the `openshell-next` workflow also runs at 07:17 UTC as a backup for the 04:17 UTC schedule, because GitHub may delay or drop a scheduled run; both slots share one concurrency group and no-op when the pin is unchanged
 - docs: README try-path and install notes for early testers; feedback issue template and Discussions contact link; Contributor Covenant; SECURITY.md supported versions
 - ci: `openshell-next` branch automation: a daily workflow merges main into `openshell-next`, moves its OpenShell pin to the newest upstream tag (prereleases included), runs the tests and reports on the tracking issue; `scripts/openshell-tags.sh` and `scripts/openshell-next.sh` do the same by hand
