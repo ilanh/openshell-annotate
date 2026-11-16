@@ -10,7 +10,7 @@ subprocesses; add directives with reasons; run `scan`, `generate`, `lint`, `drif
 
 ## When changing this tool
 - Build/test: `cargo build && cargo test` (Rust 1.94+). The schema crate is a git dependency pinned to the
-  OpenShell `v0.1.7` tag (see `Cargo.toml`, `Cargo.lock` pins the commit). Update the tag deliberately and re-run
+  OpenShell `v0.1.8` tag (see `Cargo.toml`, `Cargo.lock` pins the commit). Update the tag deliberately and re-run
   the golden tests. `openshell-next` builds against the newest upstream tag, prereleases included, and is moved by
   `.github/workflows/openshell-next.yml`; fixes that need the newer OpenShell go there, fixes valid on the current pin
   go to `main` (see `docs/DEVELOPING.md`, "Tracking the next OpenShell release").

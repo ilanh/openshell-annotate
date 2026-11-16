@@ -8,7 +8,7 @@ un-annotated calls, and gates CI on drift.
 > **Independent community project.** openshell-annotate is not affiliated with, endorsed by, or sponsored by
 > NVIDIA. It uses NVIDIA OpenShell's public policy schema crate (Apache-2.0) to validate what it generates.
 
-Early pre-release **v0.1.0-rc.3** (targets OpenShell policy schema v1, `openshell-policy-schema` @ v0.1.7).
+Early pre-release **v0.1.0-rc.3** (targets OpenShell policy schema v1, `openshell-policy-schema` @ v0.1.8).
 Licensed under Apache-2.0.
 
 ## Try it in two minutes
@@ -136,7 +136,7 @@ stderr. Exit codes and `--deny-warnings` do not depend on the format.
 
 ### Files the image keeps outside OpenShell's baseline (`generate --image`)
 
-OpenShell 0.1.7 only lets the sandbox read `/usr /lib /etc /app /var/log /proc /dev/urandom` (plus the workspace when
+OpenShell 0.1.8 only lets the sandbox read `/usr /lib /etc /app /var/log /proc /dev/urandom` (plus the workspace when
 `include_workdir` is on) once a `filesystem_policy` exists, and it does not log filesystem denials
 ([NVIDIA/OpenShell#4270](https://github.com/NVIDIA/OpenShell/issues/4270)), so an application under `/opt/<app>` fails with a bare
 `EACCES`. `generate --image IMAGE` inspects the image (docker, then podman: WORKDIR, ENTRYPOINT, CMD, and the directory
@@ -310,7 +310,11 @@ exclude = []               # files diff-logs never picks as the place for a sugg
 cloud APIs only. For every credential nothing declares (reported as `unmapped`), `generate --scaffold-profiles DIR` writes
 `DIR/<env-lowercased-with-hyphens>.yaml`: the credential, and the endpoints, `access` and binaries taken from the `egress`
 directives in the file that declares it (`tls=skip` endpoints get `allow_uninspected_credentials: true`, which OpenShell
-requires). Files that already exist are kept. Review the auth style, then check and import it:
+requires). Files that already exist are kept. Review the auth style, then check and import it. The skeleton sends the
+credential as a bearer token in `Authorization`; since OpenShell v0.1.8 a credential is substituted only where the profile
+declares it ([NVIDIA/OpenShell#4886](https://github.com/NVIDIA/OpenShell/pull/4886)), so an API that takes it in another header
+(`x-api-key`), a query parameter or a URL path needs `auth_style: header|query|path` with `header_name`, `query_param` or
+`path_template`:
 
 ```
 openshell-annotate generate -o openshell/policy.yaml --providers-out openshell/providers.sh --scaffold-profiles openshell/profiles
@@ -346,7 +350,7 @@ the rule; a profile bound to other binaries (the bundled `github` profile is for
   listed in `[lint] ignore_hosts`.
 - JS regex literals are not parsed; Python docstrings are strings (directives must be `#` comments).
 - Filesystem/process/landlock are startup-only in OpenShell; drift labels them `startup`.
-- `diff-logs` only sees network and L7 events: OpenShell 0.1.7 does not log Landlock/filesystem denials (upstream #4270), log
+- `diff-logs` only sees network and L7 events: OpenShell 0.1.8 does not log Landlock/filesystem denials (upstream #4270), log
   delivery is batched and best-effort (wait a few seconds after the workload; absence of an event is not proof), and `NET:REFUSE` lines carry no binary.
   A helper spawned by an allowed binary (git -> git-remote-http) is matched through its parent.
 - Semantic checks mirror `openshell-policy::validate_sandbox_policy` (documented rules) but the authoritative
