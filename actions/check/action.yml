@@ -9,6 +9,10 @@ inputs:
     description: CLI version, as for `setup` (a release tag, `latest` for the newest stable release, or `source` to build the action's own ref).
     required: false
     default: v0.1.0-rc.3
+  cache:
+    description: Cache the installed binary between runs, as for `setup` (keyed on the resolved release tag; not used for `source`).
+    required: false
+    default: "true"
   root:
     description: Repository root for drift and lint.
     required: false
@@ -49,20 +53,27 @@ runs:
       shell: bash
       run: bash "${{ github.action_path }}/../lib/setup.sh" dir
 
+    - name: Resolve version
+      id: ver
+      shell: bash
+      env:
+        OPENSHELL_ANNOTATE_VERSION: ${{ inputs.version }}
+      run: bash "${{ github.action_path }}/../lib/setup.sh" resolve
+
     - name: Restore cache
-      if: inputs.version != 'source'
+      if: inputs.cache == 'true' && steps.ver.outputs.cacheable == 'true'
       id: cache
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.dir.outputs.dir }}/openshell-annotate
-        key: openshell-annotate-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+        key: openshell-annotate-${{ runner.os }}-${{ runner.arch }}-${{ steps.ver.outputs.version }}
 
     - name: Install from release
       if: inputs.version != 'source' && steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         INSTALL_DIR: ${{ steps.dir.outputs.dir }}
-        OPENSHELL_ANNOTATE_VERSION: ${{ inputs.version }}
+        OPENSHELL_ANNOTATE_VERSION: ${{ steps.ver.outputs.version }}
         VERIFY: "false"
       run: bash "${{ github.action_path }}/../lib/setup.sh" install
 

@@ -43,6 +43,8 @@ Expected: four result lines, all `ok` (26 unit tests, 30 CLI tests in `tests/cli
   file for `diff-logs`).
 - When you change generated output on purpose, edit the golden file by hand and review the diff. Nothing rewrites goldens.
 - Add a test for every new directive, attribute, lint pattern or error message.
+- The GitHub Actions' shell helpers have shell tests in `tests/actions/` (run them directly, e.g.
+  `tests/actions/setup-resolve.sh`; they need bash, curl and python3); `actions-selftest.yml` runs them in CI.
 
 ## 4. Run what CI runs
 

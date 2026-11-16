@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Shared steps for the `setup` and `check` composite actions.
-# Usage: setup.sh dir|install|build|finish
+# Usage: setup.sh dir|resolve|install|build|finish
 # Paths are resolved from this script's location, never from the caller's workspace, so the actions work
 # when consumed remotely (`uses: ilanh/openshell-annotate/actions/check@<ref>`) or from any checkout path.
 set -euo pipefail
@@ -15,6 +15,36 @@ case "${1:-}" in
     [ -n "$dir" ] || dir="${RUNNER_TOOL_CACHE:?}/openshell-annotate"
     mkdir -p "$dir"
     echo "dir=$dir" >>"$GITHUB_OUTPUT"
+    ;;
+  resolve)
+    # in: OPENSHELL_ANNOTATE_VERSION (tag, `latest` or `source`; empty means `latest`), OPENSHELL_ANNOTATE_BASE_URL
+    # (optional, as for install.sh). out: `version` (the concrete tag to install) and `cacheable` (true/false).
+    # `latest` is resolved to the tag GitHub redirects /releases/latest to, so the cache key names the real release
+    # and a new stable release is installed instead of the first cached one (#77). If it cannot be resolved (no
+    # stable release yet, network error) the cache is skipped and install.sh reports the error.
+    want="${OPENSHELL_ANNOTATE_VERSION:-latest}"
+    cacheable=true
+    case "$want" in
+      source)
+        cacheable=false
+        ;;
+      latest)
+        base="${OPENSHELL_ANNOTATE_BASE_URL:-https://github.com/ilanh/openshell-annotate/releases}"
+        url="$(curl -fsSLI --retry 3 --retry-delay 2 -o /dev/null -w '%{url_effective}' "$base/latest" 2>/dev/null || true)"
+        tag="${url##*/}"
+        if printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+          want="$tag"
+          echo "version latest resolved to $want"
+        else
+          cacheable=false
+          echo "::warning::could not resolve version latest to a release tag (is there a stable release yet?); not caching"
+        fi
+        ;;
+      v*) ;;
+      *) want="v$want" ;;
+    esac
+    echo "version=$want" >>"$GITHUB_OUTPUT"
+    echo "cacheable=$cacheable" >>"$GITHUB_OUTPUT"
     ;;
   install)
     # in: INSTALL_DIR, OPENSHELL_ANNOTATE_VERSION, VERIFY
@@ -61,7 +91,7 @@ case "${1:-}" in
     echo "openshell-annotate $ver at $bin"
     ;;
   *)
-    echo "usage: setup.sh dir|install|build|finish" >&2
+    echo "usage: setup.sh dir|resolve|install|build|finish" >&2
     exit 2
     ;;
 esac
