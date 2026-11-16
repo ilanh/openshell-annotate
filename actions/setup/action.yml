@@ -20,7 +20,7 @@ inputs:
     required: false
     default: "false"
   cache:
-    description: Cache the installed binary between runs (keyed on OS, arch and `version`; not used for `source`).
+    description: Cache the installed binary between runs (keyed on OS, arch and the resolved release tag, so `latest` picks up new releases; not used for `source`).
     required: false
     default: "true"
 
@@ -42,20 +42,27 @@ runs:
         INPUT_INSTALL_DIR: ${{ inputs.install-dir }}
       run: bash "${{ github.action_path }}/../lib/setup.sh" dir
 
+    - name: Resolve version
+      id: ver
+      shell: bash
+      env:
+        OPENSHELL_ANNOTATE_VERSION: ${{ inputs.version }}
+      run: bash "${{ github.action_path }}/../lib/setup.sh" resolve
+
     - name: Restore cache
-      if: inputs.cache == 'true' && inputs.version != 'source'
+      if: inputs.cache == 'true' && steps.ver.outputs.cacheable == 'true'
       id: cache
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.dir.outputs.dir }}/openshell-annotate
-        key: openshell-annotate-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+        key: openshell-annotate-${{ runner.os }}-${{ runner.arch }}-${{ steps.ver.outputs.version }}
 
     - name: Install from release
       if: inputs.version != 'source' && steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         INSTALL_DIR: ${{ steps.dir.outputs.dir }}
-        OPENSHELL_ANNOTATE_VERSION: ${{ inputs.version }}
+        OPENSHELL_ANNOTATE_VERSION: ${{ steps.ver.outputs.version }}
         VERIFY: ${{ inputs.verify-attestation }}
       run: bash "${{ github.action_path }}/../lib/setup.sh" install
 
