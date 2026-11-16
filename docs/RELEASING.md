@@ -79,6 +79,12 @@ release" note to the tracking issue. To bring it to `main`:
    workflow create the issue at the next upstream tag; it links a compare view for opening the PR.
 5. Cut a release of openshell-annotate as usual if users should get the new pin.
 
+If `openshell-next` has already moved past the stable tag (to the next release's prereleases) before you promote, bump
+`main` directly instead: on a branch from `main`, run `scripts/openshell-next.sh bump vX.Y.Z`, do step 2 there and open a
+PR with `Closes #<tracking issue>` (OpenShell v0.1.8 went this way). `sync` keeps the newer pin when it merges `main`, so
+`openshell-next` stays on the prerelease; retitle the draft tracking PR for the next version or close it and let step 4
+replace it.
+
 Never promote a prerelease pin to `main`: stable openshell-annotate releases build against stable OpenShell only.
 
 ## Installing

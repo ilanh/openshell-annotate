@@ -101,6 +101,9 @@ pub fn scaffold(unmapped: &[Unmapped], dirs: &[Directive], cfg: &Config) -> Vec<
         y.push_str(&format!("    env_vars: [{}]\n", u.env));
         y.push_str("    required: true\n");
         y.push_str("    # TODO: how does the API take this credential? bearer (authorization header) is the common case.\n");
+        y.push_str("    # OpenShell v0.1.8+ substitutes it only where declared: another header needs `auth_style: header` and its\n");
+        y.push_str("    # `header_name` (e.g. x-api-key), a query parameter `auth_style: query` + `query_param`, a URL path slot\n");
+        y.push_str("    # `auth_style: path` + `path_template` (with {credential}).\n");
         y.push_str("    auth_style: bearer\n");
         y.push_str("    header_name: authorization\n");
         y.push_str("discovery:\n");

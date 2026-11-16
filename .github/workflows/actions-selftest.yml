@@ -7,11 +7,13 @@ on:
       - "actions/**"
       - ".github/workflows/actions-selftest.yml"
       - "install.sh"
+      - "tests/actions/**"
   pull_request:
     paths:
       - "actions/**"
       - ".github/workflows/actions-selftest.yml"
       - "install.sh"
+      - "tests/actions/**"
       - "docs/GITHUB_ACTIONS.md"
       - "README.md"
 
@@ -34,6 +36,14 @@ jobs:
           cache: "true"
       - name: Print version
         run: openshell-annotate --version
+
+  # Regression test for #77: `version: latest` must key the cache on the resolved release tag, not on "latest".
+  setup-resolve:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: setup.sh resolve
+        run: tests/actions/setup-resolve.sh
 
   integration:
     name: integration (${{ matrix.os }})
