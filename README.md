@@ -349,6 +349,12 @@ the rule; a profile bound to other binaries (the bundled `github` profile is for
   people (`help`, `usage`, `msg`, `message`, `error`, `doc`, ...). Real calls are still flagged. A host that still shows up can be
   listed in `[lint] ignore_hosts`.
 - JS regex literals are not parsed; Python docstrings are strings (directives must be `#` comments).
+- OpenShell v0.1.8 changes that lint checks: a `ws://`/`wss://` URL literal whose host is declared only by an inspected
+  `rest` egress is a warning (REST endpoints answer WebSocket upgrades with 403, NVIDIA/OpenShell#5336; use
+  `protocol=websocket`), and an IPv4-mapped IPv6 host (`::ffff:203.0.113.7`) in a directive or a `--policy` file is a warning
+  (it is evaluated as IPv4, NVIDIA/OpenShell#5101). A WebSocket client with a computed URL or behind an SDK is not seen.
+  Filesystem policy paths that go through a symlink inside a writable directory now fail sandbox launch
+  (NVIDIA/OpenShell#5278); the symlink lives in the image, so lint cannot see it: put the symlink's target in `@openshell fs`.
 - Filesystem/process/landlock are startup-only in OpenShell; drift labels them `startup`.
 - `diff-logs` only sees network and L7 events: OpenShell 0.1.8 does not log Landlock/filesystem denials (upstream #4270), log
   delivery is batched and best-effort (wait a few seconds after the workload; absence of an event is not proof), and `NET:REFUSE` lines carry no binary.

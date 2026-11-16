@@ -5,6 +5,7 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+- feat(lint): warn about OpenShell v0.1.8 pitfalls: `ws://`/`wss://` URL literals declared only by a `rest` egress (REST endpoints answer WebSocket upgrades with 403), and IPv4-mapped IPv6 hosts (`::ffff:a.b.c.d`, evaluated as IPv4) in egress directives and policy files; README notes that symlinked filesystem paths (fail launch since v0.1.8) cannot be detected statically
 - chore(deps): build against OpenShell v0.1.8 (`openshell-policy-schema`, `openshell-policy`); docs and generated policy headers now name v0.1.8. The gateway validator now rejects `websocket_credential_rewrite: true` on `protocol: rest` (covered by a test); `--scaffold-profiles` skeletons explain the v0.1.8 credential placement rule (credentials go only where the profile declares them); `diff-logs` needs no change for the OCSF `device.container.*` move; the RUSTSEC-2026-0459 ignore stays (v0.1.8 still pins `sqlx` 0.9.0)
 - fix(actions): `setup` and `check` resolve `version: latest` to the newest release tag before the cache step and key the cache on that tag, so a new stable release is installed instead of the first cached binary; `check` gets a `cache` input like `setup` (#77)
 - ci: the `openshell-next` workflow also runs at 07:17 UTC as a backup for the 04:17 UTC schedule, because GitHub may delay or drop a scheduled run; both slots share one concurrency group and no-op when the pin is unchanged
