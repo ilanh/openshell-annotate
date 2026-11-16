@@ -79,7 +79,7 @@ Two settings decide what runs:
 | --- | --- | --- | --- |
 | Reproducible CI (recommended) | a release tag, e.g. `@v0.1.0-rc.3`, or that tag's commit SHA | default, or the same tag | Nothing changes until you bump the ref. |
 | Track development | `@main` | `source` | Builds the CLI from the same commit as the actions. Adds about 2–3 minutes per job (no cargo cache) and breaks when `main` breaks, which is the point for an early-warning repo. |
-| Newest stable release | a release tag | `latest` | `latest` resolves the newest **stable** release only. Every release so far is a `-rc` prerelease, so `latest` currently fails; pin a tag. |
+| Newest stable release | a release tag | `latest` | `latest` resolves the newest **stable** release only, and the cache is keyed on the tag it resolves to, so a new release is installed on the next run. Every release so far is a `-rc` prerelease, so `latest` currently fails; pin a tag. |
 
 `version: source` builds the openshell-annotate sources that ship with the action at its `@ref`, never the caller's
 checkout. A prerelease tag (`v0.1.0-rc.3`) must be given explicitly; see
@@ -124,7 +124,7 @@ builds from source.
 | `version` | no | `v0.1.0-rc.3` | Release tag to install (e.g. v0.1.0-rc.3), `latest` (newest stable release only), or `source` to build the openshell-annotate sources at the action's own ref with cargo (Rust 1.94+). |
 | `install-dir` | no | _(empty)_ | Directory for the openshell-annotate binary (added to PATH); empty means `$RUNNER_TOOL_CACHE/openshell-annotate`. |
 | `verify-attestation` | no | `false` | Run `gh attestation verify` after download (needs GitHub CLI + contents:read). |
-| `cache` | no | `true` | Cache the installed binary between runs (keyed on OS, arch and `version`; not used for `source`). |
+| `cache` | no | `true` | Cache the installed binary between runs (keyed on OS, arch and the resolved release tag, so `latest` picks up new releases; not used for `source`). |
 
 | Output | Description |
 | --- | --- |
@@ -135,14 +135,15 @@ builds from source.
 
 ### `check`
 
-Runs `setup`, then `drift`, then `lint`, with the same behaviour as the separate actions. It always caches release
-downloads and has no `paths` input; use the separate actions when you need those.
+Runs `setup`, then `drift`, then `lint`, with the same behaviour as the separate actions. It caches release downloads
+like `setup` (turn that off with `cache: "false"`) and has no `paths` input; use the separate actions when you need it.
 
 <!-- BEGIN actions-docs check -->
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `version` | no | `v0.1.0-rc.3` | CLI version, as for `setup` (a release tag, `latest` for the newest stable release, or `source` to build the action's own ref). |
+| `cache` | no | `true` | Cache the installed binary between runs, as for `setup` (keyed on the resolved release tag; not used for `source`). |
 | `root` | no | `.` | Repository root for drift and lint. |
 | `policy` | yes | — | Committed policy.yaml. |
 | `providers` | no | _(empty)_ | Optional committed providers JSON for drift. |
@@ -330,7 +331,7 @@ uploads it as `playground-policy` and builds the sandbox image.
 | --- | --- |
 | `Can't find 'action.yml', 'action.yaml' or 'Dockerfile' under '…/actions/setup'` when using `check` | `check@v0.1.0-rc.3` and older nest `uses: ./actions/...`, which resolves against your repository ([#65](https://github.com/ilanh/openshell-annotate/issues/65)). Use `setup` + `drift` + `lint` at that tag, or a ref that includes [#66](https://github.com/ilanh/openshell-annotate/pull/66). |
 | `could not resolve the latest release (is there a stable release yet? use --version)` | `version: latest` only finds stable releases and there are none yet. Pin a tag such as `v0.1.0-rc.3`. |
-| `latest` keeps installing an old release | The cache key contains the literal `version`, so `latest` reuses the first cached binary. Set `cache: "false"` on `setup` (`check` always caches), or pin a tag. |
+| `latest` keeps installing an old release | Fixed in [#77](https://github.com/ilanh/openshell-annotate/issues/77): `setup` and `check` resolve `latest` to a release tag before the cache step and key the cache on it. With an action ref older than that fix the key contains the literal `latest`; set `cache: "false"` on `setup`, or pin a tag. |
 | Source build fails with a Rust version or edition error | `version: source` uses the runner's `cargo` when present and needs Rust 1.94+; otherwise it installs 1.94 with `rustup`. Update the toolchain on self-hosted runners. |
 | `install.sh failed (attempt N/5)` or download errors | Release downloads retry with backoff (and `curl` retries each request). If all attempts fail, GitHub was unavailable; re-run the failed jobs. |
 | `lint-report.sh requires jq` or an empty drift summary | Install `jq` on self-hosted runners. |
@@ -344,8 +345,9 @@ they work from any repository and checkout path. `check` does not nest `uses: ./
 composite action a relative `uses:` resolves against the caller's workspace.
 
 [`.github/workflows/actions-selftest.yml`](../.github/workflows/actions-selftest.yml) runs on changes to `actions/`,
-`install.sh` and these docs: a release install, `check`/`generate`/`diff-logs` on Ubuntu and macOS from source, an
-expected drift failure, and a `consumer-check` job that runs `check` the way another repository does (from a
+`install.sh`, `tests/actions/` and these docs: a release install, `tests/actions/setup-resolve.sh` (how `setup.sh resolve`
+turns `latest` into the cache key, against a local server that imitates GitHub's redirect), `check`/`generate`/`diff-logs`
+on Ubuntu and macOS from source, an expected drift failure, and a `consumer-check` job that runs `check` the way another repository does (from a
 subdirectory checkout, for `source` and a release) to catch #65 regressions.
 
 ### Changing an action
