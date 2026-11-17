@@ -57,6 +57,28 @@ TOOLCHAIN=1.94 scripts/ci-local.sh     # pinned like CI; omit TOOLCHAIN to use y
 
 Expected last line: `ci-local: all checks passed`. Optional audit: `cargo install cargo-audit --locked && cargo audit`.
 
+The `Security` workflow (`.github/workflows/security.yml`, #101) adds four jobs. Run them locally with
+`scripts/security-local.sh` (expected last line: `security-local: all checks passed`):
+
+| Job | What it checks | Config |
+| --- | --- | --- |
+| `actionlint` | every workflow, including shellcheck on `run:` scripts | — |
+| `gitleaks` | the full git history for committed secrets | gitleaks defaults |
+| `cargo-deny` | RustSec advisories, licenses, banned/duplicate crates, allowed sources | `deny.toml` |
+| `openshell-pin` | the Cargo.toml OpenShell tag, the Cargo.lock commit and the upstream tag agree | `scripts/verify-openshell-pin.sh` |
+
+The tools come from `scripts/ci-tools.sh install actionlint gitleaks cargo-deny` (Linux x86_64), which downloads pinned
+versions and refuses an archive whose SHA-256 differs from the hash pinned in the script; actionlint is also checked
+with `gh attestation verify --repo rhysd/actionlint` (gitleaks and cargo-deny publish no attestations). To bump a
+tool, change its version and hash together. A new license in the dependency tree fails `cargo-deny` until it is
+reviewed and added to `deny.toml`. Pin every third-party action by full commit SHA with the version in a comment
+(`uses: owner/action@<sha> # vX.Y.Z`); actionlint does not enforce this, review does.
+
+CI never downloads OpenShell binaries: it builds the policy crates from the `NVIDIA/OpenShell` git tag. OpenShell's
+release attestations cover its built packages, which can be built from another commit than the tag (v0.1.8's .deb came
+from 22209de, the tag is f3d9765), so the `openshell-pin` job checks the source pin instead and reports whether GitHub
+verified the commit's signature.
+
 Clippy gains new lints with every Rust release. If it fails on a newer toolchain but passes on 1.94, fix the lint in a
 separate commit (CI will keep using 1.94 until the pin is bumped on purpose in `ci.yml`, `Dockerfile` and `Cargo.toml`).
 
@@ -149,6 +171,8 @@ Fixes for breakage on the new OpenShell go in a `fix/<name>` branch off `openshe
 `cargo audit` ignores are listed in `.cargo/audit.toml`, each with its advisory and the condition for removing it.
 Today that is `RUSTSEC-2026-0459` (`libsqlite3-sys` pinned by OpenShell's `sqlx`, #76): whenever you bump the OpenShell
 pin, run `cargo tree -i libsqlite3-sys --target all` and drop the ignore once it resolves to 0.39.0 or newer.
+`cargo deny` needs no such ignore (`deny.toml` has none): it checks only crates in the build graph, and
+`libsqlite3-sys` is in `Cargo.lock` but not built. Any advisory ignore added to `deny.toml` needs a `reason`.
 
 ## 5. Try it on a tiny project
 

@@ -1,0 +1,55 @@
+# cargo-deny configuration (read by `cargo deny check`, which the `cargo-deny` job in .github/workflows/security.yml runs).
+# Run locally: `cargo deny check` (or scripts/security-local.sh). Docs: https://embarkstudios.github.io/cargo-deny/
+# Every exception below must say why it is needed and when to remove it.
+
+[graph]
+all-features = true
+
+[advisories]
+# RustSec advisory DB. Vulnerabilities, unmaintained and unsound crates fail the check, yanked versions too.
+yanked = "deny"
+unmaintained = "all"
+# No ignores. RUSTSEC-2026-0459 (libsqlite3-sys 0.37.0, #76), which .cargo/audit.toml ignores, is not reported here:
+# cargo-deny checks the resolved build graph, and libsqlite3-sys (OpenShell openshell-crypto -> sqlx -> sqlx-sqlite) is
+# only in Cargo.lock, not in any build of this crate (`cargo tree -i libsqlite3-sys --target all` prints nothing).
+# cargo audit reads the whole lockfile, which is why it still needs its ignore. Add an entry here only with a reason.
+ignore = []
+
+[licenses]
+# Permissive licenses the current dependency tree actually uses (from `cargo deny list`), all compatible with
+# this crate's Apache-2.0. Anything else (GPL, AGPL, SSPL, unlicensed crates...) fails the check until reviewed.
+# r-efi also offers LGPL-2.1-or-later, but it is dual-licensed MIT OR Apache-2.0, so LGPL is not allowed here.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+unused-allowed-license = "allow"
+
+[licenses.private]
+# The OpenShell crates are unpublished workspace members (version 0.0.0) but carry a license field; check them too.
+ignore = false
+
+[bans]
+# Duplicate versions are common in this tree (OpenShell pulls its own versions); report, do not fail.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "simplest-path"
+
+[sources]
+# Only crates.io and the pinned NVIDIA/OpenShell git repository. The pin itself (tag -> commit in Cargo.lock) is
+# checked by scripts/verify-openshell-pin.sh.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = ["https://github.com/NVIDIA/OpenShell"]

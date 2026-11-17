@@ -368,6 +368,7 @@ the rule; a profile bound to other binaries (the bundled `github` profile is for
 cargo fmt --check && cargo clippy --all-targets -- -D warnings
 cargo test
 scripts/gen-docs.sh --check                  # docs/CLI.md and docs/DIRECTIVES.md are generated from the code
+scripts/security-local.sh                    # actionlint, gitleaks, cargo deny and the OpenShell pin check
 ```
 
 Full guide (prerequisites, a hands-on quick start, Docker, the sandbox flow, branch workflow): [docs/DEVELOPING.md](docs/DEVELOPING.md).
