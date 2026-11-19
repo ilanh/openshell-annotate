@@ -17,6 +17,8 @@ subprocesses; add directives with reasons; run `scan`, `generate`, `lint`, `drif
 - Never emit a field the pinned `openshell-policy-schema` rejects. `generate` re-parses its own output with
   `parse_policy`; tests assert this.
 - Generated YAML is written as text (comments with `file:line`) because `serialize_policy` drops comments.
+- New dependencies must pass `cargo deny check` (`deny.toml`: allowed licenses and sources); run
+  `scripts/security-local.sh` after touching workflows, dependencies or the OpenShell pin.
 - No secrets anywhere (directives, reasons, fixtures, providers output). Providers use the bare
   `--credential KEY` form so values come from the caller's environment.
 - Add a test for every new directive, attribute, lint pattern or error message. Fixtures live in
@@ -41,6 +43,7 @@ A change is not done until the docs that describe it match. Update them in the s
 | Pinned OpenShell version (`Cargo.toml`) | every doc that names the version (`git grep -n 'v0\.1\.[0-9]'`) |
 | OpenShell tracking (`scripts/openshell-*.sh`, `scripts/upstream-compat.sh`, `openshell-next.yml`, `upstream-compat.yml`) | `docs/DEVELOPING.md` (section 4) and the promotion steps in `docs/RELEASING.md` |
 | Branch, issue or CI rules | `CONTRIBUTING.md`, `docs/DEVELOPING.md`, `.github/pull_request_template.md` |
+| Security checks (`security.yml`, `deny.toml`, `scripts/ci-tools.sh`, `scripts/verify-openshell-pin.sh`, `scripts/security-local.sh`) | `docs/DEVELOPING.md` (section 4) and `SECURITY.md` ("Supply chain") |
 | Anything user-visible | a line under `## [Unreleased]` in `CHANGELOG.md` |
 
 CI enforces the generated parts (`scripts/gen-docs.sh --check`, `scripts/gen-actions-docs.sh --check`); the rest is on

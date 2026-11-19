@@ -1,0 +1,76 @@
+name: Security
+
+# Supply-chain and repository hygiene checks (#101):
+#   actionlint     lint every workflow (with shellcheck on `run:` scripts)
+#   gitleaks       scan the full git history for committed secrets
+#   cargo-deny     advisories, licenses, bans and sources for the Rust dependency tree (deny.toml)
+#   openshell-pin  the NVIDIA/OpenShell git pin: Cargo.toml tag = Cargo.lock commit = upstream tag
+# Tools are downloaded by scripts/ci-tools.sh at pinned versions and checked against pinned SHA-256 hashes
+# (actionlint also against its GitHub build provenance). Run the same checks locally: scripts/security-local.sh
+# These jobs are not (yet) required status checks; see .github/rulesets/protect-main.json.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # New RustSec advisories appear without any change here.
+  schedule:
+    - cron: "23 4 * * 2" # Tuesdays 04:23 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install actionlint (pinned, sha256 + attestation)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci-tools.sh install actionlint --dir "$RUNNER_TEMP/bin"
+      - name: actionlint
+        run: actionlint -color
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks (pinned, sha256)
+        run: scripts/ci-tools.sh install gitleaks --dir "$RUNNER_TEMP/bin"
+      - name: gitleaks (full history)
+        run: gitleaks git --redact --no-banner --exit-code 1 .
+
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install 1.94 --profile minimal && rustup default 1.94
+      - name: Install cargo-deny (pinned, sha256)
+        run: scripts/ci-tools.sh install cargo-deny --dir "$RUNNER_TEMP/bin"
+      - name: cargo deny check
+        run: cargo deny --locked check
+
+  openshell-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify the NVIDIA/OpenShell pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/verify-openshell-pin.sh
