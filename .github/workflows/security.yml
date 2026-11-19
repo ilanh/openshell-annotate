@@ -7,7 +7,8 @@ name: Security
 #   openshell-pin  the NVIDIA/OpenShell git pin: Cargo.toml tag = Cargo.lock commit = upstream tag
 # Tools are downloaded by scripts/ci-tools.sh at pinned versions and checked against pinned SHA-256 hashes
 # (actionlint also against its GitHub build provenance). Run the same checks locally: scripts/security-local.sh
-# These jobs are not (yet) required status checks; see .github/rulesets/protect-main.json.
+# The job names are required status checks on main (.github/rulesets/protect-main.json, #103): renaming a job here
+# needs the same change in the ruleset, or every pull request waits for a check that never reports.
 
 on:
   push:

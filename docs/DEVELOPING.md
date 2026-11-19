@@ -57,7 +57,8 @@ TOOLCHAIN=1.94 scripts/ci-local.sh     # pinned like CI; omit TOOLCHAIN to use y
 
 Expected last line: `ci-local: all checks passed`. Optional audit: `cargo install cargo-audit --locked && cargo audit`.
 
-The `Security` workflow (`.github/workflows/security.yml`, #101) adds four jobs. Run them locally with
+The `Security` workflow (`.github/workflows/security.yml`, #101) adds four jobs, all required status checks on `main`
+next to `check` and `audit` (#103). Run them locally with
 `scripts/security-local.sh` (expected last line: `security-local: all checks passed`):
 
 | Job | What it checks | Config |
@@ -272,7 +273,7 @@ git switch -c feat/short-name                  # or fix/..., docs/..., chore/...
 git commit -s -m "feat: what and why"          # -s adds the DCO Signed-off-by line (required)
 git push -u origin feat/short-name             # CI runs on every push to a pull request
 gh pr create --fill                            # open the PR into main
-gh pr checks --watch                           # wait for `check` and `audit` to pass
+gh pr checks --watch                           # wait for the required checks (CI and Security) to pass
 gh pr merge --squash                           # squash merge; the branch is deleted automatically
 ```
 

@@ -14,14 +14,14 @@ goes through a branch and a pull request.
 3. Run `scripts/ci-local.sh` before pushing (`TOOLCHAIN=1.94 scripts/ci-local.sh` pins the toolchain CI uses), and
    `scripts/security-local.sh` when you touch workflows, dependencies or the OpenShell pin.
 4. `git push -u origin <branch>` and open a pull request into `main`.
-5. CI must pass (the required `check` and `audit` jobs, and the `Security` workflow's `actionlint`, `gitleaks`,
-   `cargo-deny` and `openshell-pin` jobs), the branch must be up to date with `main`, and all review
+5. CI must pass (the required checks: `check` and `audit` from CI, and `actionlint`, `gitleaks`, `cargo-deny` and
+   `openshell-pin` from the `Security` workflow), the branch must be up to date with `main`, and all review
    conversations must be resolved.
 6. Merge with **squash merge** (the only merge method enabled; the PR title becomes the commit message, so use a
    conventional title). The head branch is deleted automatically after the merge.
 
 The rules are defined in `.github/rulesets/protect-main.json` and applied with `scripts/protect-main.sh`: pull request
-required (0 approvals, conversations resolved), status checks `check` and `audit` required and up to date, linear
+required (0 approvals, conversations resolved), status checks `check`, `audit`, `actionlint`, `gitleaks`, `cargo-deny` and `openshell-pin` required and up to date, linear
 history, no force pushes, no deletion, and no bypass for admins. GitHub only enforces rulesets on private repositories
 with a paid plan; until then the rules are followed by convention.
 

@@ -71,7 +71,8 @@ release" note to the tracking issue. To bring it to `main`:
    in `src/`), regenerate the goldens (`UPDATE_GOLDEN=1 cargo test`, then review), and add a CHANGELOG line under
    `## [Unreleased]`. The workflow only moves the pin, so these strings still name the old version until then.
 3. Retitle the tracking PR to `chore(deps): bump OpenShell crates to vX.Y.Z`, put `Closes #<tracking issue>` in it,
-   mark it ready for review, and squash-merge it once `check` and `audit` pass. Those required checks come from the
+   mark it ready for review, and squash-merge it once the required checks pass (`check`, `audit` and the `Security` jobs `actionlint`, `gitleaks`,
+   `cargo-deny`, `openshell-pin`). Those required checks come from the
    PR's `pull_request` runs: your push in step 2 starts them; if the head is still a bot commit, select **Approve
    workflows to run** on the PR (the `CI (dispatched)` statuses do not count as the required checks). `openshell-next` itself survives the
    merge (the `protect-openshell-next` ruleset blocks the automatic branch deletion) and keeps tracking from `main`.
