@@ -10,6 +10,17 @@ OpenShell itself should be reported to the OpenShell project (see its `SECURITY.
 - It makes no network calls and never executes the code it scans.
 - It does not read or emit secret values. `provider` directives name environment variables only.
 
+## Supply chain
+
+- Every pull request and push to `main`, plus a weekly run, goes through the `Security` workflow: actionlint on the
+  workflows, gitleaks over the full git history, `cargo deny check` (RustSec advisories, licenses, sources; see
+  `deny.toml`) and a check that the pinned `NVIDIA/OpenShell` tag, the commit in `Cargo.lock` and the upstream tag
+  agree. `cargo audit` runs in CI as well. All of these are required status checks for merging into `main`.
+- Third-party GitHub Actions are pinned by commit SHA. CI tools are downloaded at pinned versions and checked against
+  pinned SHA-256 hashes.
+- Release archives come with `SHA256SUMS` and GitHub build provenance (`gh attestation verify <file> --repo
+  ilanh/openshell-annotate`, see `docs/RELEASING.md`).
+
 ## Supported versions
 
 The latest [pre-release](https://github.com/ilanh/openshell-annotate/releases) tag (currently **v0.1.0-rc.3**)

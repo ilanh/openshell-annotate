@@ -10,6 +10,7 @@ Closes #
 
 - [ ] Branch is named `feat/`, `fix/`, `docs/`, `chore/` or `test/` and commits are signed off (`git commit -s`)
 - [ ] `scripts/ci-local.sh` passes (`TOOLCHAIN=1.94 scripts/ci-local.sh`)
+- [ ] `scripts/security-local.sh` passes if workflows, dependencies or the OpenShell pin changed
 - [ ] Tests added or updated (`tests/cli.rs`, fixtures, golden files)
 - [ ] Docs regenerated if directives or flags changed (`scripts/gen-docs.sh`)
 - [ ] Docs updated in this PR for every behaviour change (mapping in `AGENTS.md`: `actions/*` → `docs/GITHUB_ACTIONS.md` + `scripts/gen-actions-docs.sh`, CLI → `README.md`, release process → `docs/RELEASING.md`)

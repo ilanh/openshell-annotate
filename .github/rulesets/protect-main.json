@@ -21,7 +21,14 @@
       "type": "required_status_checks",
       "parameters": {
         "strict_required_status_checks_policy": true,
-        "required_status_checks": [ { "context": "check" }, { "context": "audit" } ]
+        "required_status_checks": [
+          { "context": "check" },
+          { "context": "audit" },
+          { "context": "actionlint" },
+          { "context": "gitleaks" },
+          { "context": "cargo-deny" },
+          { "context": "openshell-pin" }
+        ]
       }
     }
   ],
