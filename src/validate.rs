@@ -2,7 +2,7 @@
 //!
 //! Authoritative checks live in `openshell-policy-schema` (parsing, unknown fields) and in
 //! [`gateway_violations`], which calls `openshell_policy::validate_and_canonicalize_sandbox_policy`
-//! (OpenShell v0.1.8, the same tag as the schema crate). This module also re-implements the
+//! (OpenShell v0.1.9, the same tag as the schema crate). This module also re-implements the
 //! file-level semantic rules documented in `docs/how-it-works/policies/schema.mdx` so errors carry
 //! directive locations. `generate` round-trips its output through `parse_policy` and the gateway
 //! validator.
@@ -77,6 +77,79 @@ pub fn host_warning(host: &str) -> Option<String> {
     let h = host.trim_matches(|c| c == '[' || c == ']');
     let v4 = h.parse::<std::net::Ipv6Addr>().ok()?.to_ipv4_mapped()?;
     Some(format!("`{host}` is an IPv4-mapped IPv6 address; OpenShell v0.1.8+ evaluates these destinations as IPv4, so the rule never matches: use `{v4}`"))
+}
+
+/// Private and special-use IPv4 ranges a wildcard endpoint no longer admits as IP literals since OpenShell v0.1.9
+/// (ai-openshell/openshell#5522): RFC 1918, CGNAT, IETF protocol assignments, the three TEST-NETs, benchmarking and
+/// broadcast. Loopback, link-local and unspecified are always blocked and rejected by [`check_host`] already.
+/// Each entry is the inclusive range per octet.
+const GRANT_ONLY_V4: &[[(u8, u8); 4]] = &[
+    [(10, 10), (0, 255), (0, 255), (0, 255)],
+    [(172, 172), (16, 31), (0, 255), (0, 255)],
+    [(192, 192), (168, 168), (0, 255), (0, 255)],
+    [(100, 100), (64, 127), (0, 255), (0, 255)],
+    [(192, 192), (0, 0), (0, 0), (0, 255)],
+    [(192, 192), (0, 0), (2, 2), (0, 255)],
+    [(198, 198), (18, 19), (0, 255), (0, 255)],
+    [(198, 198), (51, 51), (100, 100), (0, 255)],
+    [(203, 203), (0, 0), (113, 113), (0, 255)],
+    [(255, 255), (255, 255), (255, 255), (255, 255)],
+];
+
+/// Matches one DNS label against a pattern label in which `*` stands for any run of characters.
+fn label_glob(pat: &str, s: &str) -> bool {
+    match pat.split_once('*') {
+        None => pat == s,
+        Some((head, rest)) => {
+            s.starts_with(head)
+                && (0..=s.len() - head.len()).any(|i| label_glob(rest, &s[head.len() + i..]))
+        }
+    }
+}
+
+/// Returns a private IPv4 address that the wildcard `host` matches, if any. A leading `**` label matches one or more
+/// labels; other labels match one label each.
+fn wildcard_private_v4(host: &str) -> Option<std::net::Ipv4Addr> {
+    let h = host.trim_matches(|c| c == '[' || c == ']');
+    if !h.contains('*') {
+        return None;
+    }
+    let labels: Vec<&str> = h.split('.').collect();
+    let (spread, tail) = match labels.split_first() {
+        Some((&"**", rest)) => (true, rest),
+        _ => (false, &labels[..]),
+    };
+    let fits = if spread {
+        tail.len() < 4
+    } else {
+        tail.len() == 4
+    };
+    if !fits
+        || tail
+            .iter()
+            .any(|l| l.is_empty() || !l.chars().all(|c| c.is_ascii_digit() || c == '*'))
+    {
+        return None;
+    }
+    let mut pats = vec!["*"; 4 - tail.len()];
+    pats.extend_from_slice(tail);
+    GRANT_ONLY_V4.iter().find_map(|net| {
+        let mut octets = [0u8; 4];
+        for (i, &(lo, hi)) in net.iter().enumerate() {
+            octets[i] = (lo..=hi).find(|v| label_glob(pats[i], &v.to_string()))?;
+        }
+        Some(std::net::Ipv4Addr::from(octets))
+    })
+}
+
+/// Returns a warning when the wildcard `host` can match a private IPv4 literal such as `10.0.0.1`.
+///
+/// Since OpenShell v0.1.9 (ai-openshell/openshell#5522) a wildcard endpoint no longer allows a private IP literal on
+/// its own: the destination needs an exact endpoint for that address or an `allowed_ips` grant. Callers skip the
+/// warning for policy endpoints that have `allowed_ips`.
+pub fn wildcard_private_ip_warning(host: &str) -> Option<String> {
+    let ip = wildcard_private_v4(host)?;
+    Some(format!("wildcard host `{host}` matches private IP literals such as `{ip}`; OpenShell v0.1.9+ no longer allows a private IP literal through a wildcard endpoint: declare each private address as its own endpoint (in a policy file, `allowed_ips` also works)"))
 }
 
 /// Checks a `filesystem_policy` path; `write` is true for `read_write` entries.
@@ -400,6 +473,11 @@ pub fn check_document(doc: &PolicyDocument) -> (Vec<String>, Vec<String>) {
                 if let Some(m) = host_warning(&ep.host) {
                     warns.push(format!("{at}: {m}"));
                 }
+                if ep.allowed_ips.is_empty() {
+                    if let Some(m) = wildcard_private_ip_warning(&ep.host) {
+                        warns.push(format!("{at}: {m}"));
+                    }
+                }
             }
             if ep.port != 0 && !ep.ports.is_empty() {
                 errs.push(format!("{at}: `port` and `ports` are mutually exclusive"));
@@ -489,6 +567,31 @@ mod tests {
         assert!(host_warning("203.0.113.7").is_none());
         assert!(host_warning("2001:db8::1").is_none());
         assert!(host_warning("api.example.com").is_none());
+    }
+
+    #[test]
+    fn wildcard_hosts_that_match_private_ip_literals_warn() {
+        assert!(wildcard_private_ip_warning("**.*.*")
+            .unwrap()
+            .contains("such as `10.0.0.0`"));
+        assert!(wildcard_private_ip_warning("10.*.*.*").is_some());
+        assert!(wildcard_private_ip_warning("*.23.45.67")
+            .unwrap()
+            .contains("`10.23.45.67`"));
+        assert!(wildcard_private_ip_warning("**.168.1.1")
+            .unwrap()
+            .contains("`10.168.1.1`"));
+        assert!(wildcard_private_ip_warning("17*.*.*.*")
+            .unwrap()
+            .contains("`172.16.0.0`"));
+        assert!(wildcard_private_ip_warning("[**.*.*]").is_some());
+        // public-only, exact or DNS wildcards: no warning
+        assert!(wildcard_private_ip_warning("8.*.*.*").is_none());
+        assert!(wildcard_private_ip_warning("172.32.*.*").is_none());
+        assert!(wildcard_private_ip_warning("10.0.0.1").is_none());
+        assert!(wildcard_private_ip_warning("*.example.com").is_none());
+        assert!(wildcard_private_ip_warning("**.example.com").is_none());
+        assert!(wildcard_private_ip_warning("*.*.*.*.*").is_none());
     }
 
     #[test]

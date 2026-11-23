@@ -521,7 +521,13 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
             out.push(directive_finding(&d.file, d.line, m));
         }
         if let Kind::Egress { host, .. } = &d.kind {
-            if let Some(m) = validate::host_warning(host) {
+            for m in [
+                validate::host_warning(host),
+                validate::wildcard_private_ip_warning(host),
+            ]
+            .into_iter()
+            .flatten()
+            {
                 out.push(Finding::new(
                     d.file.clone(),
                     d.line,

@@ -74,3 +74,27 @@ fn websocket_credential_rewrite_needs_the_websocket_protocol() {
     let ws = openshell_annotate::validate::gateway_violations(&policy("websocket")).unwrap();
     assert!(ws.is_empty(), "{ws:?}");
 }
+
+/// OpenShell v0.1.9 (ai-openshell/openshell#4359): middleware endpoint selectors match hosts on every port, and a
+/// selector with a port now fails validation. annotate does not generate `network_middlewares`, but `lint --policy`,
+/// `drift` and `generate` run the gateway validator on committed policies, so they report it.
+#[test]
+fn middleware_selectors_cannot_include_a_port() {
+    let policy = |include: &str| {
+        format!(
+            "version: 1\nnetwork_middlewares:\n  redact:\n    middleware: openshell/regex\n    order: 10\n    config:\n      mode: redact\n    on_error: fail_closed\n    endpoints:\n      include: [\"{include}\"]\nnetwork_policies:\n  api:\n    binaries:\n      - path: /usr/bin/curl\n    endpoints:\n      - host: api.example.com\n        port: 443\n"
+        )
+    };
+    let with_port =
+        openshell_annotate::validate::gateway_violations(&policy("api.example.com:443")).unwrap();
+    assert!(
+        with_port.iter().any(|v| v.contains("cannot include one")),
+        "{with_port:?}"
+    );
+    let without =
+        openshell_annotate::validate::gateway_violations(&policy("api.example.com")).unwrap();
+    assert!(
+        !without.iter().any(|v| v.contains("cannot include one")),
+        "{without:?}"
+    );
+}
