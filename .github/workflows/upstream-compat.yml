@@ -1,6 +1,6 @@
 name: Upstream compatibility
 
-# Builds and tests main against NVIDIA/OpenShell's newest release, newest prerelease and its main branch (both policy
+# Builds and tests main against ai-openshell/openshell's newest release, newest prerelease and its main branch (both policy
 # crates repointed to the same upstream commit), so upstream changes show up here before they bite users.
 # Informational only: this is NOT a required check (see .github/rulesets/protect-main.json), and only scheduled and
 # manual runs can fail. The `openshell-next` branch (.github/workflows/openshell-next.yml) is where a newer pin is
@@ -78,7 +78,7 @@ jobs:
           gh label create upstream-compat --color D93F0B --description "Broken against a newer OpenShell" 2>/dev/null || true
           {
             echo "**Target:** \`$TARGET\` (\`${LABEL:-unresolved}\` @ \`${SHA:-unknown}\`)"
-            echo "**Upstream commit:** https://github.com/NVIDIA/OpenShell/commit/${SHA:-}"
+            echo "**Upstream commit:** https://github.com/ai-openshell/openshell/commit/${SHA:-}"
             echo "**Run / full log:** $RUN_URL"
             echo
             echo "Last lines of the log:"

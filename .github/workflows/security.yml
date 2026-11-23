@@ -4,7 +4,7 @@ name: Security
 #   actionlint     lint every workflow (with shellcheck on `run:` scripts)
 #   gitleaks       scan the full git history for committed secrets
 #   cargo-deny     advisories, licenses, bans and sources for the Rust dependency tree (deny.toml)
-#   openshell-pin  the NVIDIA/OpenShell git pin: Cargo.toml tag = Cargo.lock commit = upstream tag
+#   openshell-pin  the ai-openshell/openshell git pin: Cargo.toml tag = Cargo.lock commit = upstream tag
 # Tools are downloaded by scripts/ci-tools.sh at pinned versions and checked against pinned SHA-256 hashes
 # (actionlint also against its GitHub build provenance). Run the same checks locally: scripts/security-local.sh
 # The job names are required status checks on main (.github/rulesets/protect-main.json, #103): renaming a job here
@@ -71,7 +71,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Verify the NVIDIA/OpenShell pin
+      - name: Verify the ai-openshell/openshell pin
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/verify-openshell-pin.sh

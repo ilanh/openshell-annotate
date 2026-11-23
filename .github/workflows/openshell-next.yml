@@ -1,6 +1,6 @@
 name: openshell-next
 
-# Keeps the long-lived `openshell-next` branch building against the newest NVIDIA/OpenShell tag, prereleases included,
+# Keeps the long-lived `openshell-next` branch building against the newest ai-openshell/openshell tag, prereleases included,
 # so the next OpenShell release is integrated (and any breakage fixed) before it ships as stable.
 # Twice daily (04:17 and 07:17 UTC): merge main into openshell-next, bump the OpenShell pin when upstream has a newer
 # tag, run the tests, push, and report on the tracking issue (label `openshell-next`). The later run is a backup:
@@ -49,7 +49,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   BRANCH: openshell-next
-  UPSTREAM: https://github.com/NVIDIA/OpenShell
+  UPSTREAM: https://github.com/ai-openshell/openshell
 
 jobs:
   track:

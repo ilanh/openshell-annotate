@@ -744,7 +744,7 @@ fn egress_protocol(d: &Directive) -> Option<String> {
 }
 
 /// Warns about `ws://` / `wss://` URL literals whose host and port are declared only by inspected `rest` egress
-/// directives. Since OpenShell v0.1.8 (NVIDIA/OpenShell#5336) a REST endpoint answers WebSocket upgrade requests
+/// directives. Since OpenShell v0.1.8 (ai-openshell/openshell#5336) a REST endpoint answers WebSocket upgrade requests
 /// with 403, so these clients need `protocol=websocket`. Comment-only lines and excluded files are skipped.
 fn websocket_on_rest(scan: &Scan, cfg: &Config) -> Vec<Finding> {
     static RE: OnceLock<Regex> = OnceLock::new();

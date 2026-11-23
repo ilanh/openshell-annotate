@@ -1,6 +1,6 @@
 # openshell-annotate
 
-Policy-as-code for [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) sandboxes. Developers write
+Policy-as-code for [NVIDIA OpenShell](https://github.com/ai-openshell/openshell) sandboxes. Developers write
 structured comments next to the code that needs access; the CLI scans the repo and generates `policy.yaml`
 (every entry commented with its reason and `file:line`) plus a separate providers file, lints for
 un-annotated calls, and gates CI on drift.
@@ -138,7 +138,7 @@ stderr. Exit codes and `--deny-warnings` do not depend on the format.
 
 OpenShell 0.1.8 only lets the sandbox read `/usr /lib /etc /app /var/log /proc /dev/urandom` (plus the workspace when
 `include_workdir` is on) once a `filesystem_policy` exists, and it does not log filesystem denials
-([NVIDIA/OpenShell#4270](https://github.com/NVIDIA/OpenShell/issues/4270)), so an application under `/opt/<app>` fails with a bare
+([ai-openshell/openshell#4270](https://github.com/ai-openshell/openshell/issues/4270)), so an application under `/opt/<app>` fails with a bare
 `EACCES`. `generate --image IMAGE` inspects the image (docker, then podman: WORKDIR, ENTRYPOINT, CMD, and the directory
 layout from a throw-away `create` + `export | tar -t`; nothing is started) and prints, on stderr, a proposal such as
 `# @openshell fs read /opt/context7 reason="..."` for each directory that is neither in the baseline nor under a declared
@@ -312,7 +312,7 @@ cloud APIs only. For every credential nothing declares (reported as `unmapped`),
 directives in the file that declares it (`tls=skip` endpoints get `allow_uninspected_credentials: true`, which OpenShell
 requires). Files that already exist are kept. Review the auth style, then check and import it. The skeleton sends the
 credential as a bearer token in `Authorization`; since OpenShell v0.1.8 a credential is substituted only where the profile
-declares it ([NVIDIA/OpenShell#4886](https://github.com/NVIDIA/OpenShell/pull/4886)), so an API that takes it in another header
+declares it ([ai-openshell/openshell#4886](https://github.com/ai-openshell/openshell/pull/4886)), so an API that takes it in another header
 (`x-api-key`), a query parameter or a URL path needs `auth_style: header|query|path` with `header_name`, `query_param` or
 `path_template`:
 
@@ -350,11 +350,11 @@ the rule; a profile bound to other binaries (the bundled `github` profile is for
   listed in `[lint] ignore_hosts`.
 - JS regex literals are not parsed; Python docstrings are strings (directives must be `#` comments).
 - OpenShell v0.1.8 changes that lint checks: a `ws://`/`wss://` URL literal whose host is declared only by an inspected
-  `rest` egress is a warning (REST endpoints answer WebSocket upgrades with 403, NVIDIA/OpenShell#5336; use
+  `rest` egress is a warning (REST endpoints answer WebSocket upgrades with 403, ai-openshell/openshell#5336; use
   `protocol=websocket`), and an IPv4-mapped IPv6 host (`::ffff:203.0.113.7`) in a directive or a `--policy` file is a warning
-  (it is evaluated as IPv4, NVIDIA/OpenShell#5101). A WebSocket client with a computed URL or behind an SDK is not seen.
+  (it is evaluated as IPv4, ai-openshell/openshell#5101). A WebSocket client with a computed URL or behind an SDK is not seen.
   Filesystem policy paths that go through a symlink inside a writable directory now fail sandbox launch
-  (NVIDIA/OpenShell#5278); the symlink lives in the image, so lint cannot see it: put the symlink's target in `@openshell fs`.
+  (ai-openshell/openshell#5278); the symlink lives in the image, so lint cannot see it: put the symlink's target in `@openshell fs`.
 - Filesystem/process/landlock are startup-only in OpenShell; drift labels them `startup`.
 - `diff-logs` only sees network and L7 events: OpenShell 0.1.8 does not log Landlock/filesystem denials (upstream #4270), log
   delivery is batched and best-effort (wait a few seconds after the workload; absence of an event is not proof), and `NET:REFUSE` lines carry no binary.

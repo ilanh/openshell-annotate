@@ -71,7 +71,7 @@ pub fn check_host(host: &str) -> Result<(), String> {
 
 /// Returns a warning when `host` is an IPv4-mapped IPv6 address such as `::ffff:203.0.113.7`.
 ///
-/// Since OpenShell v0.1.8 (NVIDIA/OpenShell#5101) transparent TCP connections to such destinations are evaluated as
+/// Since OpenShell v0.1.8 (ai-openshell/openshell#5101) transparent TCP connections to such destinations are evaluated as
 /// IPv4, so a rule has to name the IPv4 address. Brackets are ignored.
 pub fn host_warning(host: &str) -> Option<String> {
     let h = host.trim_matches(|c| c == '[' || c == ']');
