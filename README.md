@@ -8,7 +8,7 @@ un-annotated calls, and gates CI on drift.
 > **Independent community project.** openshell-annotate is not affiliated with, endorsed by, or sponsored by
 > NVIDIA. It uses NVIDIA OpenShell's public policy schema crate (Apache-2.0) to validate what it generates.
 
-Early pre-release **v0.1.0-rc.3** (targets OpenShell policy schema v1, `openshell-policy-schema` @ v0.1.8).
+Early pre-release **v0.1.0-rc.3** (targets OpenShell policy schema v1, `openshell-policy-schema` @ v0.1.9).
 Licensed under Apache-2.0.
 
 ## Try it in two minutes
@@ -136,7 +136,7 @@ stderr. Exit codes and `--deny-warnings` do not depend on the format.
 
 ### Files the image keeps outside OpenShell's baseline (`generate --image`)
 
-OpenShell 0.1.8 only lets the sandbox read `/usr /lib /etc /app /var/log /proc /dev/urandom` (plus the workspace when
+OpenShell 0.1.9 only lets the sandbox read `/usr /lib /etc /app /var/log /proc /dev/urandom` (plus the workspace when
 `include_workdir` is on) once a `filesystem_policy` exists, and it does not log filesystem denials
 ([ai-openshell/openshell#4270](https://github.com/ai-openshell/openshell/issues/4270)), so an application under `/opt/<app>` fails with a bare
 `EACCES`. `generate --image IMAGE` inspects the image (docker, then podman: WORKDIR, ENTRYPOINT, CMD, and the directory
@@ -355,8 +355,14 @@ the rule; a profile bound to other binaries (the bundled `github` profile is for
   (it is evaluated as IPv4, ai-openshell/openshell#5101). A WebSocket client with a computed URL or behind an SDK is not seen.
   Filesystem policy paths that go through a symlink inside a writable directory now fail sandbox launch
   (ai-openshell/openshell#5278); the symlink lives in the image, so lint cannot see it: put the symlink's target in `@openshell fs`.
+- OpenShell v0.1.9 changes: a wildcard endpoint no longer allows a private IP literal (RFC 1918, CGNAT, TEST-NET and
+  similar) on its own (ai-openshell/openshell#5522), so lint warns when a wildcard host in a directive or a `--policy` file
+  can match one (`10.*.*.*`, `**.*.*`); declare each private address as its own endpoint, or give the policy endpoint
+  `allowed_ips`. Middleware selectors (`network_middlewares.*.endpoints`) can no longer include a port
+  (ai-openshell/openshell#4359); annotate does not generate middlewares, but `lint --policy`, `drift` and `generate` run
+  the gateway validator on committed policies and report it.
 - Filesystem/process/landlock are startup-only in OpenShell; drift labels them `startup`.
-- `diff-logs` only sees network and L7 events: OpenShell 0.1.8 does not log Landlock/filesystem denials (upstream #4270), log
+- `diff-logs` only sees network and L7 events: OpenShell 0.1.9 does not log Landlock/filesystem denials (upstream #4270), log
   delivery is batched and best-effort (wait a few seconds after the workload; absence of an event is not proof), and `NET:REFUSE` lines carry no binary.
   A helper spawned by an allowed binary (git -> git-remote-http) is matched through its parent.
 - Semantic checks mirror `openshell-policy::validate_sandbox_policy` (documented rules) but the authoritative

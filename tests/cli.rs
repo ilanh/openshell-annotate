@@ -2272,3 +2272,48 @@ fn lint_policy_warns_about_ipv4_mapped_hosts() {
         "{s}"
     );
 }
+
+/// OpenShell v0.1.9 (ai-openshell/openshell#5522): a wildcard endpoint no longer allows a private IP literal on its
+/// own. lint warns about wildcard hosts that match private IPv4 literals, unless the policy endpoint has `allowed_ips`.
+#[test]
+fn lint_warns_about_wildcards_that_match_private_ip_literals() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("a.js"), "console.log(1)\n").unwrap();
+    let policy = |extra: &str| {
+        format!("version: 1\nnetwork_policies:\n  lan:\n    endpoints:\n      - host: \"**.*.*\"\n        port: 443\n{extra}    binaries:\n      - path: /usr/bin/curl\n")
+    };
+    std::fs::write(t.path().join("p.yaml"), policy("")).unwrap();
+    let o = run(
+        t.path(),
+        &["lint", "--format", "compact", "--policy", "p.yaml"],
+    );
+    let s = out(&o);
+    assert!(
+        s.contains("wildcard host `**.*.*` matches private IP literals such as `10.0.0.0`"),
+        "{s}{}",
+        err(&o)
+    );
+    std::fs::write(
+        t.path().join("p.yaml"),
+        policy("        allowed_ips:\n          - 10.23.45.0/24\n"),
+    )
+    .unwrap();
+    let s = out(&run(
+        t.path(),
+        &["lint", "--format", "compact", "--policy", "p.yaml"],
+    ));
+    assert!(!s.contains("private IP literals"), "{s}");
+    // and in an egress directive, where only an exact address helps
+    std::fs::write(
+        t.path().join("a.js"),
+        "// @openshell egress 10.*.*.*:443 reason=\"lan\"\nconsole.log(1)\n",
+    )
+    .unwrap();
+    let s = out(&run(t.path(), &["lint", "--format", "compact"]));
+    assert!(
+        s.contains(
+            "a.js:1: warning[directive]: wildcard host `10.*.*.*` matches private IP literals"
+        ),
+        "{s}"
+    );
+}
