@@ -5,7 +5,7 @@
 ignore = [
   # RUSTSEC-2026-0459: libsqlite3-sys 0.37.0 (C SQLite CVE-2026-119375), fixed in >= 0.39.0.
   # https://rustsec.org/advisories/RUSTSEC-2026-0459 - tracked in https://github.com/ilanh/openshell-annotate/issues/76
-  # Transitive and not upgradable from this repo: OpenShell v0.1.7 and v0.1.8 openshell-crypto -> sqlx 0.9.0 -> sqlx-sqlite =0.9.0
+  # Transitive and not upgradable from this repo: OpenShell v0.1.7 to v0.1.9 openshell-crypto -> sqlx 0.9.0 -> sqlx-sqlite =0.9.0
   # (exact pin) -> libsqlite3-sys 0.37.0. openshell-annotate does not use SQLite itself.
   # Remove this entry once an OpenShell release bumps sqlx/libsqlite3-sys and we move the pin to it.
   "RUSTSEC-2026-0459",

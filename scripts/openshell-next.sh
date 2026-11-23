@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Maintain the `openshell-next` integration branch, which builds against the newest NVIDIA/OpenShell tag
+# Maintain the `openshell-next` integration branch, which builds against the newest ai-openshell/openshell tag
 # (prereleases included). Used by .github/workflows/openshell-next.yml; safe to run by hand on a local checkout.
 #
 #   scripts/openshell-next.sh bump <tag>      # pin both OpenShell crates to <tag> in Cargo.toml and re-resolve Cargo.lock

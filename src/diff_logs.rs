@@ -3,7 +3,7 @@
 //! directives that never matched an event are reported as stale.
 //!
 //! Delivery of these logs is best-effort: *absence of a deny or an allow is not proof*. Filesystem denials are not logged by
-//! OpenShell 0.1.8 (upstream #4270), so only network and L7 HTTP events are handled.
+//! OpenShell 0.1.9 (upstream #4270), so only network and L7 HTTP events are handled.
 
 use crate::config::Config;
 use crate::directive::{Directive, Kind};
@@ -876,7 +876,7 @@ pub fn render_text(rep: &Report) -> String {
         "diff-logs: {} event(s) ({} denied, {} allowed); {} suggestion(s), {} stale directive(s)\n",
         rep.events, rep.denied, rep.allowed, rep.suggestions.len(), rep.stale.len()
     );
-    s.push_str("note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.8 (#4270).\n");
+    s.push_str("note: logs are best-effort and lossy; absence of an event is not proof. Filesystem denials are not logged by OpenShell 0.1.9 (#4270).\n");
     for g in &rep.suggestions {
         let up = g.kind.to_ascii_uppercase();
         s.push_str(&format!(
@@ -989,8 +989,23 @@ garbage line\n";
     }
 
     #[test]
+    fn skips_gateway_api_activity_denials_old_and_new() {
+        // Gateway authorization denials are OCSF API Activity (class 6003) records, not sandbox egress. OpenShell
+        // v0.1.9 (ai-openshell/openshell#5606) reports write denials as Create/Update/Delete (type_uid 600301..3)
+        // instead of Other (600399); diff-logs never selects on type_uid, so both shapes are skipped.
+        let t = concat!(
+            "{\"class_uid\":6003,\"activity_id\":99,\"type_uid\":600399,\"status_id\":2,\"action\":\"Denied\",\"dst_endpoint\":{\"domain\":\"gw\",\"port\":8080}}\n",
+            "{\"class_uid\":6003,\"activity_id\":3,\"type_uid\":600303,\"status_id\":2,\"action\":\"Denied\",\"dst_endpoint\":{\"domain\":\"gw\",\"port\":8080}}\n",
+            "{\"class_uid\":4001,\"action_id\":2,\"dst_endpoint\":{\"domain\":\"pypi.org\",\"port\":443}}\n",
+        );
+        let e = parse_logs(t, "x");
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].host, "pypi.org");
+    }
+
+    #[test]
     fn sandbox_attribution_location_does_not_matter() {
-        // OpenShell v0.1.8 (NVIDIA/OpenShell#5048) moved supervisor sandbox attribution from top-level `container.*`
+        // OpenShell v0.1.8 (ai-openshell/openshell#5048) moved supervisor sandbox attribution from top-level `container.*`
         // to `device.container.*`. diff-logs never reads either, so both shapes give the same event.
         let body = "\"class_uid\":4001,\"activity_id\":1,\"status_detail\":\"transparent_tcp_policy_denied\",\"dst_endpoint\":{\"domain\":\"pypi.org\",\"port\":443},\"actor\":{\"process\":{\"name\":\"/usr/bin/python3\"}},\"action_id\":2,\"action\":\"Denied\"";
         let v017 = format!("{{{body},\"device\":{{\"hostname\":\"sandbox\"}},\"container\":{{\"name\":\"s\",\"uid\":\"u\"}}}}\n");

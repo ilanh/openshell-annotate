@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# List and compare NVIDIA/OpenShell release tags in release order (a stable vX.Y.Z sorts after its vX.Y.Z-pre.N).
+# List and compare ai-openshell/openshell release tags in release order (a stable vX.Y.Z sorts after its vX.Y.Z-pre.N).
 #
 #   scripts/openshell-tags.sh latest          # newest tag, prereleases included (what `openshell-next` tracks)
 #   scripts/openshell-tags.sh latest-stable   # newest vX.Y.Z
@@ -9,14 +9,14 @@
 #   scripts/openshell-tags.sh is-stable A     # exit 0 when A is vX.Y.Z (no prerelease suffix)
 #
 # Only vX.Y.Z and vX.Y.Z-pre.N tags count; anything else upstream (`dev`, `vm-runtime`, ...) is ignored.
-# Env: UPSTREAM_REPO (default https://github.com/NVIDIA/OpenShell); OPENSHELL_TAGS (newline-separated tag list to use
+# Env: UPSTREAM_REPO (default https://github.com/ai-openshell/openshell); OPENSHELL_TAGS (newline-separated tag list to use
 #      instead of asking the remote, for tests and offline runs); OPENSHELL_ANNOTATE_ROOT (checkout whose Cargo.toml
 #      `pinned` reads; default: the checkout this script lives in).
 # Exit: 0 ok / true, 1 false, 2 usage or no tags found.
 set -euo pipefail
 cd "${OPENSHELL_ANNOTATE_ROOT:-$(dirname "$0")/..}"
 
-REPO="${UPSTREAM_REPO:-https://github.com/NVIDIA/OpenShell}"
+REPO="${UPSTREAM_REPO:-https://github.com/ai-openshell/openshell}"
 RE='^v[0-9]+\.[0-9]+\.[0-9]+(-pre\.[0-9]+)?$'
 
 usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }

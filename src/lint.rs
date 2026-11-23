@@ -521,7 +521,13 @@ pub fn lint(scan: &Scan, cfg: &Config) -> Vec<Finding> {
             out.push(directive_finding(&d.file, d.line, m));
         }
         if let Kind::Egress { host, .. } = &d.kind {
-            if let Some(m) = validate::host_warning(host) {
+            for m in [
+                validate::host_warning(host),
+                validate::wildcard_private_ip_warning(host),
+            ]
+            .into_iter()
+            .flatten()
+            {
                 out.push(Finding::new(
                     d.file.clone(),
                     d.line,
@@ -744,7 +750,7 @@ fn egress_protocol(d: &Directive) -> Option<String> {
 }
 
 /// Warns about `ws://` / `wss://` URL literals whose host and port are declared only by inspected `rest` egress
-/// directives. Since OpenShell v0.1.8 (NVIDIA/OpenShell#5336) a REST endpoint answers WebSocket upgrade requests
+/// directives. Since OpenShell v0.1.8 (ai-openshell/openshell#5336) a REST endpoint answers WebSocket upgrade requests
 /// with 403, so these clients need `protocol=websocket`. Comment-only lines and excluded files are skipped.
 fn websocket_on_rest(scan: &Scan, cfg: &Config) -> Vec<Finding> {
     static RE: OnceLock<Regex> = OnceLock::new();
