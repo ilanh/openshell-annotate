@@ -47,9 +47,9 @@ allow-wildcard-paths = true
 highlight = "simplest-path"
 
 [sources]
-# Only crates.io and the pinned NVIDIA/OpenShell git repository. The pin itself (tag -> commit in Cargo.lock) is
+# Only crates.io and the pinned ai-openshell/openshell git repository. The pin itself (tag -> commit in Cargo.lock) is
 # checked by scripts/verify-openshell-pin.sh.
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = ["https://github.com/NVIDIA/OpenShell"]
+allow-git = ["https://github.com/ai-openshell/openshell"]

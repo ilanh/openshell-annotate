@@ -990,7 +990,7 @@ garbage line\n";
 
     #[test]
     fn sandbox_attribution_location_does_not_matter() {
-        // OpenShell v0.1.8 (NVIDIA/OpenShell#5048) moved supervisor sandbox attribution from top-level `container.*`
+        // OpenShell v0.1.8 (ai-openshell/openshell#5048) moved supervisor sandbox attribution from top-level `container.*`
         // to `device.container.*`. diff-logs never reads either, so both shapes give the same event.
         let body = "\"class_uid\":4001,\"activity_id\":1,\"status_detail\":\"transparent_tcp_policy_denied\",\"dst_endpoint\":{\"domain\":\"pypi.org\",\"port\":443},\"actor\":{\"process\":{\"name\":\"/usr/bin/python3\"}},\"action_id\":2,\"action\":\"Denied\"";
         let v017 = format!("{{{body},\"device\":{{\"hostname\":\"sandbox\"}},\"container\":{{\"name\":\"s\",\"uid\":\"u\"}}}}\n");

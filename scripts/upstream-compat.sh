@@ -3,18 +3,18 @@
 # (openshell-policy-schema and openshell-policy, both repointed to the same upstream commit),
 # WITHOUT touching this working tree (Cargo.toml / Cargo.lock stay pinned). Works on a temporary copy.
 #
-#   scripts/upstream-compat.sh latest-release   # newest stable vX.Y.Z tag of NVIDIA/OpenShell
+#   scripts/upstream-compat.sh latest-release   # newest stable vX.Y.Z tag of ai-openshell/openshell
 #   scripts/upstream-compat.sh latest-prerelease # newest tag incl. vX.Y.Z-pre.N (what openshell-next tracks; = latest-release when no newer prerelease)
 #   scripts/upstream-compat.sh main             # OpenShell HEAD
 #   scripts/upstream-compat.sh v0.1.7-pre.3     # any tag, branch or commit SHA
 #
-# Env: UPSTREAM_REPO (default https://github.com/NVIDIA/OpenShell), UPSTREAM_COMPAT_LOG (also write the log there),
+# Env: UPSTREAM_REPO (default https://github.com/ai-openshell/openshell), UPSTREAM_COMPAT_LOG (also write the log there),
 #      CARGO_TARGET_DIR (reuse a build cache), GITHUB_STEP_SUMMARY / GITHUB_OUTPUT (set automatically in Actions).
 # Exit: 0 compatible, 1 build/test failure, 2 usage / could not resolve the ref.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-REPO="${UPSTREAM_REPO:-https://github.com/NVIDIA/OpenShell}"
+REPO="${UPSTREAM_REPO:-https://github.com/ai-openshell/openshell}"
 TARGET="${1:-}"
 [ -n "$TARGET" ] || { echo "usage: $0 <latest-release|latest-prerelease|main|tag|branch|sha>" >&2; exit 2; }
 

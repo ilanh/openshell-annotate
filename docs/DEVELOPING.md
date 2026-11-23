@@ -75,10 +75,14 @@ tool, change its version and hash together. A new license in the dependency tree
 reviewed and added to `deny.toml`. Pin every third-party action by full commit SHA with the version in a comment
 (`uses: owner/action@<sha> # vX.Y.Z`); actionlint does not enforce this, review does.
 
-CI never downloads OpenShell binaries: it builds the policy crates from the `NVIDIA/OpenShell` git tag. OpenShell's
+CI never downloads OpenShell binaries: it builds the policy crates from the `ai-openshell/openshell` git tag. OpenShell's
 release attestations cover its built packages, which can be built from another commit than the tag (v0.1.8's .deb came
 from 22209de, the tag is f3d9765), so the `openshell-pin` job checks the source pin instead and reports whether GitHub
 verified the commit's signature.
+
+OpenShell moved from `NVIDIA/OpenShell` to `ai-openshell/openshell` in November 2026 (upstream #5833). The old
+URL redirects, but `Cargo.toml`, `deny.toml` (`allow-git`) and the scripts use the new one, so `cargo deny` rejects a
+lock file that still resolves from `NVIDIA/OpenShell` and `scripts/verify-openshell-pin.sh` finds no pin in it.
 
 Clippy gains new lints with every Rust release. If it fails on a newer toolchain but passes on 1.94, fix the lint in a
 separate commit (CI will keep using 1.94 until the pin is bumped on purpose in `ci.yml`, `Dockerfile` and `Cargo.toml`).
@@ -225,7 +229,7 @@ openshell-annotate diff-logs path/to/sandbox.log --write  # inserts directives a
 
 Sample logs for both formats are in `tests/fixtures/logs/`. Filesystem denials are not logged by OpenShell 0.1.8, so
 `diff-logs` only sees network and L7 events. It reads no sandbox attribution fields, so OpenShell v0.1.8 moving
-`container.uid`/`container.name` to `device.container.*` (NVIDIA/OpenShell#5048) needs no change; the OCSF fixture
+`container.uid`/`container.name` to `device.container.*` (ai-openshell/openshell#5048) needs no change; the OCSF fixture
 is real v0.1.7 output.
 
 ## 6. Docker image

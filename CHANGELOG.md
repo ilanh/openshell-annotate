@@ -5,6 +5,8 @@ version section and adds the squash-merged PR titles since the previous tag. Ver
 
 ## [Unreleased]
 
+- chore(deps): update `url` to 2.5.9 (and `form_urlencoded` to 1.2.3) in `Cargo.lock` for RUSTSEC-2026-0592, a stack overflow in `Url::origin()` on nested `blob:` URLs; `url` comes in through OpenShell's crates (#111)
+- chore(deps): OpenShell moved to `ai-openshell/openshell`: the git dependencies, `Cargo.lock` sources (same v0.1.8 commit), `deny.toml` `allow-git`, the pin/tag/compat/openshell-next scripts and workflows, and upstream links in the docs use the new URL instead of the `NVIDIA/OpenShell` redirect (#105)
 - ci: the `Security` checks `actionlint`, `gitleaks`, `cargo-deny` and `openshell-pin` are required status checks on `main`, next to `check` and `audit` (`protect-main` ruleset, #103)
 - ci: `Security` workflow (#101): actionlint on the workflows, gitleaks over the full git history, `cargo deny check` with a new `deny.toml` (advisories, licenses, bans, sources), and `scripts/verify-openshell-pin.sh`, which checks that the Cargo.toml OpenShell tag, the Cargo.lock commit and the upstream tag agree; tools are installed by `scripts/ci-tools.sh` at pinned versions with pinned SHA-256 hashes (actionlint also by attestation); `scripts/security-local.sh` runs the same checks locally; `ci.yml` pins `actions/checkout` and `actions/cache` by commit SHA
 - feat(lint): warn about OpenShell v0.1.8 pitfalls: `ws://`/`wss://` URL literals declared only by a `rest` egress (REST endpoints answer WebSocket upgrades with 403), and IPv4-mapped IPv6 hosts (`::ffff:a.b.c.d`, evaluated as IPv4) in egress directives and policy files; README notes that symlinked filesystem paths (fail launch since v0.1.8) cannot be detected statically

@@ -2207,7 +2207,7 @@ fn diff_logs_reads_openshell_0_1_7_ocsf_1_8_0_records() {
     golden("diff_logs_ocsf_1_8_0_plain.txt", &out(&o));
 }
 
-/// OpenShell v0.1.8 (NVIDIA/OpenShell#5336): a REST endpoint answers WebSocket upgrades with 403, so lint warns
+/// OpenShell v0.1.8 (ai-openshell/openshell#5336): a REST endpoint answers WebSocket upgrades with 403, so lint warns
 /// about `ws://`/`wss://` URLs declared only by an inspected `rest` egress, and not once `protocol=websocket` is used.
 #[test]
 fn lint_warns_about_websocket_urls_on_rest_egress() {
@@ -2237,7 +2237,7 @@ fn lint_warns_about_websocket_urls_on_rest_egress() {
     assert!(!s.contains("WebSocket URL"), "{s}");
 }
 
-/// OpenShell v0.1.8 (NVIDIA/OpenShell#5101) evaluates IPv4-mapped IPv6 destinations as IPv4: lint warns about such
+/// OpenShell v0.1.8 (ai-openshell/openshell#5101) evaluates IPv4-mapped IPv6 destinations as IPv4: lint warns about such
 /// hosts in a policy file.
 #[test]
 fn lint_policy_warns_about_ipv4_mapped_hosts() {
