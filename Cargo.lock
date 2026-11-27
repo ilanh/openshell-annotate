@@ -2177,7 +2177,7 @@ dependencies = [
 [[package]]
 name = "openshell-core"
 version = "0.0.0"
-source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.1#b8b6d6fa91a95c5630b931576c14f8fe71d83d66"
+source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.2#2cd4f53840e1a785913156b5a9efb735bf3b16bf"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2215,7 +2215,7 @@ dependencies = [
 [[package]]
 name = "openshell-crypto"
 version = "0.0.0"
-source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.1#b8b6d6fa91a95c5630b931576c14f8fe71d83d66"
+source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.2#2cd4f53840e1a785913156b5a9efb735bf3b16bf"
 dependencies = [
  "aws-lc-rs",
  "jsonwebtoken",
@@ -2233,7 +2233,7 @@ dependencies = [
 [[package]]
 name = "openshell-extension-core"
 version = "0.0.0"
-source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.1#b8b6d6fa91a95c5630b931576c14f8fe71d83d66"
+source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.2#2cd4f53840e1a785913156b5a9efb735bf3b16bf"
 dependencies = [
  "hyper-util",
  "serde",
@@ -2246,7 +2246,7 @@ dependencies = [
 [[package]]
 name = "openshell-policy"
 version = "0.0.0"
-source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.1#b8b6d6fa91a95c5630b931576c14f8fe71d83d66"
+source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.2#2cd4f53840e1a785913156b5a9efb735bf3b16bf"
 dependencies = [
  "hickory-proto",
  "miette",
@@ -2261,7 +2261,7 @@ dependencies = [
 [[package]]
 name = "openshell-policy-schema"
 version = "0.0.0"
-source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.1#b8b6d6fa91a95c5630b931576c14f8fe71d83d66"
+source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.2#2cd4f53840e1a785913156b5a9efb735bf3b16bf"
 dependencies = [
  "miette",
  "noyalib",
@@ -2274,7 +2274,7 @@ dependencies = [
 [[package]]
 name = "openshell-spiffe"
 version = "0.0.0"
-source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.1#b8b6d6fa91a95c5630b931576c14f8fe71d83d66"
+source = "git+https://github.com/ai-openshell/openshell?tag=v0.1.11-pre.2#2cd4f53840e1a785913156b5a9efb735bf3b16bf"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
